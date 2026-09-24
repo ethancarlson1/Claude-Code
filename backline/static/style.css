@@ -330,6 +330,14 @@ body.doc-page { background: var(--bg); }
   .chat .msg { max-width: 100%; }
 }
 
+/* Sound reinforcement spec tiles */
+.specs { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: .5rem; margin-bottom: .9rem; }
+.spec { border: 1px solid var(--border); border-radius: 6px; padding: .45rem .6rem; background: var(--surface-2); min-width: 0; }
+.doc .spec { border-color: #e2e5ea; background: #f8f9fb; }
+.spec-label { display: block; font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.doc .spec-label { color: #6b7385; }
+.spec-value { font-weight: 650; overflow-wrap: anywhere; }
+
 /* Event chat in the office view */
 .chat-admin .msg { border: 1px solid var(--border); border-radius: 10px; padding: .5rem .8rem; margin: .5rem 0; background: var(--surface-2); }
 .chat-admin .msg.staff { background: var(--accent-soft); }

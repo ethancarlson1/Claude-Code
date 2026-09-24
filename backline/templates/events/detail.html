@@ -44,7 +44,7 @@
       <h2>Schedule</h2>
       <dl class="facts">
         <dt>Date</dt><dd>{{ event.event_date|fdate }}{% if event.end_date %} – {{ event.end_date|fdate }} ({{ days }} days){% endif %}</dd>
-        {% for key, label in [('load_in_time', 'Load-in'), ('soundcheck_time', 'Setup complete'), ('doors_time', 'Doors'), ('start_time', 'Show start'), ('end_time', 'Show end'), ('load_out_time', 'Load-out')] %}
+        {% for key, label in [('load_in_time', 'Load-in / delivery'), ('soundcheck_time', 'Setup complete'), ('doors_time', 'Doors'), ('start_time', 'Show / program start'), ('end_time', 'Show / program end'), ('load_out_time', 'Load-out / pickup')] %}
           {% if event[key] %}<dt>{{ label }}</dt><dd>{{ event[key]|ftime }}</dd>{% endif %}
         {% endfor %}
       </dl>
@@ -58,11 +58,10 @@
         <dt>Type</dt><dd>{{ event.event_type or '—' }}</dd>
         <dt>Client</dt><dd>{% if client %}<a href="{{ url_for('people.detail', kind='clients', row_id=client.id) }}">{{ client.name }}</a>{% if client.company %} · {{ client.company }}{% endif %}
           {% if client.phone %}<div class="small">{{ client.phone }}</div>{% endif %}{% if client.email %}<div class="small"><a href="mailto:{{ client.email }}">{{ client.email }}</a></div>{% endif %}{% else %}—{% endif %}</dd>
-        {% if event.honorees %}<dt>Couple / honorees</dt><dd>{{ event.honorees }}</dd>{% endif %}
-        {% if event.guest_count %}<dt>Guests</dt><dd>{{ event.guest_count }}</dd>{% endif %}
+        {% if event.honorees %}<dt>{{ labels.people }}</dt><dd class="pre">{{ event.honorees }}</dd>{% endif %}
         <dt>Producer</dt><dd>{% if producer %}<a href="{{ url_for('people.detail', kind='crew', row_id=producer.id) }}">{{ producer.name }}</a>{% if producer.phone %} <span class="small muted">{{ producer.phone }}</span>{% endif %}{% else %}<span class="muted">Not set — worksheets point crew to the office</span>{% endif %}</dd>
-        {% if venue2 %}<dt>{{ event.venue2_label or 'Earlier location' }}</dt><dd><a href="{{ url_for('people.detail', kind='venues', row_id=venue2.id) }}">{{ venue2.name }}</a><div class="small">{{ venue2_address }}</div></dd>{% endif %}
-        <dt>{{ event.venue_label or 'Venue' }}</dt><dd>{% if venue %}<a href="{{ url_for('people.detail', kind='venues', row_id=venue.id) }}">{{ venue.name }}</a><div class="small">{{ venue_address }}</div>{% else %}—{% endif %}</dd>
+        <dt>{{ labels.venue }}</dt><dd>{% if venue %}<a href="{{ url_for('people.detail', kind='venues', row_id=venue.id) }}">{{ venue.name }}</a><div class="small">{{ venue_address }}</div>{% else %}—{% endif %}</dd>
+        {% if venue2 %}<dt>{{ labels.venue2 }}</dt><dd><a href="{{ url_for('people.detail', kind='venues', row_id=venue2.id) }}">{{ venue2.name }}</a><div class="small">{{ venue2_address }}</div></dd>{% endif %}
         {% if event.performers %}<dt>Performers</dt><dd>{{ event.performers }}</dd>{% endif %}
         {% if event.on_site_contact or event.on_site_phone %}<dt>Day-of contact</dt><dd>{{ event.on_site_contact or '' }} {{ event.on_site_phone or '' }}</dd>{% endif %}
         {% if event.attire %}<dt>Dress code</dt><dd>{{ event.attire }}</dd>{% endif %}
@@ -71,6 +70,14 @@
         {% if venue and venue.load_in_notes %}<dt>Venue load-in</dt><dd class="pre">{{ venue.load_in_notes }}</dd>{% endif %}
         {% if venue and venue.power_notes %}<dt>Venue power</dt><dd class="pre">{{ venue.power_notes }}</dd>{% endif %}
       </dl>
+    </section>
+    <section class="card">
+      <div class="card-head"><h2>Sound reinforcement</h2><a class="small" href="{{ url_for('events.edit', event_id=event.id) }}#f-service_type">Edit</a></div>
+      {% include "_specs.html" %}
+      {% if event.playback_feeds %}<dl class="facts"><dt>Playback &amp; feeds</dt><dd class="pre">{{ event.playback_feeds }}</dd></dl>{% endif %}
+      {% if not (event.service_type or event.setting or event.guest_count or event.input_count or event.wireless_count or event.monitor_mixes or event.playback_feeds) %}
+        <p class="muted small">No specs yet: add service type, setting, audience size, inputs, wireless and monitor mixes.</p>
+      {% endif %}
     </section>
     {% if event.audio_notes or event.backline_notes or event.power_notes or event.crew_notes or event.notes %}
     <section class="card">

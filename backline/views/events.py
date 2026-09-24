@@ -1,8 +1,10 @@
+import copy
 from datetime import date, timedelta
 
 from flask import Blueprint, Response, abort, flash, g, jsonify, redirect, render_template, request, url_for
 
 from .. import db, forms, services, util
+from ..defaults import SERVICE_TYPES, VENUE_SETTINGS
 from ..forms import Field
 
 bp = Blueprint("events", __name__)
@@ -31,47 +33,83 @@ def crew_choices():
     ]
 
 
+def event_type_choices():
+    """Configured event types, plus any older type name still used by an event
+    so editing it doesn't fail validation."""
+    names = [r["name"] for r in db.query("SELECT name FROM event_types ORDER BY sort, name")]
+    legacy = [r["event_type"] for r in db.query(
+        "SELECT DISTINCT event_type FROM events WHERE event_type IS NOT NULL AND event_type != '' "
+        "AND event_type NOT IN (SELECT name FROM event_types) ORDER BY event_type"
+    )]
+    return names + legacy
+
+
 EVENT_FIELDS = [
-    Field("title", "Event title", required=True, section="Event", placeholder="e.g. Alvarez / Reed Wedding"),
-    Field("event_type", "Type", type="select", choices=util.EVENT_TYPES, section="Event"),
+    Field("title", "Event title", required=True, section="Event",
+          placeholder="e.g. Northbeam Q3 All-Hands, The Velvet Owls at Blue Door"),
+    Field("event_type", "Event type", type="select", choices=event_type_choices, section="Event",
+          help="Sets the labels, run-of-show starter and checklists. Manage types in Settings."),
     Field("status", "Status", type="select", required=True, section="Event",
           choices=[(s, s.title()) for s in util.EVENT_STATUSES], default="inquiry",
           help="Hold and Confirmed events reserve gear."),
     Field("client_id", "Client", type="fk", choices=client_choices, section="Event"),
-    Field("honorees", "Couple / honorees", section="Event", placeholder="e.g. Sofia & Marcus"),
+    Field("honorees", "Key people", type="textarea", rows=2, section="Event",
+          placeholder="Speakers and their mics, headliner and openers, the host, the couple…",
+          help="The label follows the event type."),
+    Field("performers", "Performers / entertainment", section="Event", placeholder="Band, DJ, emcee, auctioneer…"),
     Field("producer_id", "Producer (event lead)", type="fk", choices=crew_choices, section="Event",
           help="Crew's point person. Shown on worksheets with their contact info."),
-    Field("guest_count", "Number of guests", type="int", section="Event"),
-    Field("performers", "Artist / performers", section="Event"),
     Field("venue_id", "Venue", type="fk", choices=venue_choices, section="Locations"),
-    Field("venue_label", "Label", section="Locations", placeholder="e.g. Reception"),
-    Field("venue2_id", "Earlier location", type="fk", choices=venue_choices, section="Locations",
-          help="Optional, e.g. a ceremony before the reception. Listed first on worksheets."),
-    Field("venue2_label", "Label", section="Locations", placeholder="e.g. Ceremony"),
+    Field("venue_label", "Label", section="Locations", help="Leave blank to use the event type's default."),
+    Field("venue2_id", "Second location", type="fk", choices=venue_choices, section="Locations",
+          help="Optional: a breakout room, second stage, ceremony site…"),
+    Field("venue2_label", "Label", section="Locations"),
+    Field("service_type", "Service", type="select", choices=SERVICE_TYPES, section="Sound reinforcement"),
+    Field("setting", "Setting", type="select", choices=VENUE_SETTINGS, section="Sound reinforcement"),
+    Field("guest_count", "Audience / guests", type="int", section="Sound reinforcement"),
+    Field("input_count", "Inputs", type="int", section="Sound reinforcement", help="Channels on the input list."),
+    Field("wireless_count", "Wireless mics", type="int", section="Sound reinforcement"),
+    Field("monitor_mixes", "Monitor mixes", type="int", section="Sound reinforcement"),
+    Field("playback_feeds", "Playback & feeds", type="textarea", rows=2, section="Sound reinforcement",
+          placeholder="Laptop playback, walk-in music, record or stream feed to the video team, press feed…"),
+    Field("audio_notes", "Audio needs", type="textarea", section="Sound reinforcement",
+          placeholder="PA coverage, speaker placement, delays, FOH position…"),
+    Field("backline_notes", "Backline needs", type="textarea", section="Sound reinforcement",
+          placeholder="Rider requests, drum kit specs, amp preferences…"),
+    Field("power_notes", "Power", type="textarea", section="Sound reinforcement"),
     Field("event_date", "Date", type="date", required=True, section="Schedule"),
     Field("end_date", "End date", type="date", section="Schedule", help="Multi-day events only."),
-    Field("load_in_time", "Load-in", type="time", section="Schedule"),
+    Field("load_in_time", "Load-in / delivery", type="time", section="Schedule"),
     Field("soundcheck_time", "Setup complete / soundcheck", type="time", section="Schedule"),
-    Field("doors_time", "Doors", type="time", section="Schedule"),
-    Field("start_time", "Show start", type="time", section="Schedule"),
-    Field("end_time", "Show end", type="time", section="Schedule"),
-    Field("load_out_time", "Load-out", type="time", section="Schedule"),
+    Field("doors_time", "Doors / guests arrive", type="time", section="Schedule"),
+    Field("start_time", "Show / program starts", type="time", section="Schedule"),
+    Field("end_time", "Show / program ends", type="time", section="Schedule"),
+    Field("load_out_time", "Load-out / pickup", type="time", section="Schedule"),
     Field("run_of_show", "Run of show", type="textarea", rows=14, section="Schedule",
-          help="Shown on every crew worksheet. Load-in, power, parking, locations and the minute-by-minute."),
-    Field("on_site_contact", "Day-of contact", section="On site", placeholder="Planner or venue coordinator"),
+          help="Shown on every crew worksheet. Starts from the event type's template."),
+    Field("on_site_contact", "Day-of contact", section="On site",
+          placeholder="Planner, AV lead, stage manager or venue coordinator"),
     Field("on_site_phone", "Day-of phone", type="tel", section="On site"),
-    Field("attire", "Dress code", section="On site", placeholder="e.g. Black suit and tie"),
-    Field("crew_meal", "Crew meal", section="On site", placeholder="e.g. Hot meal at 6:30 PM in staff dining room"),
+    Field("attire", "Dress code", section="On site", placeholder="e.g. All black, business casual"),
+    Field("crew_meal", "Crew meal", section="On site", placeholder="e.g. Hot meal at 6:30 PM in the green room"),
     Field("parking", "Parking & load-in directions", type="textarea", section="On site"),
-    Field("audio_notes", "Audio needs", type="textarea", section="Production",
-          placeholder="PA coverage, input count, monitor mixes, wireless..."),
-    Field("backline_notes", "Backline needs", type="textarea", section="Production",
-          placeholder="Rider requests, drum kit specs, amp preferences..."),
-    Field("power_notes", "Power", type="textarea", section="Production"),
     Field("crew_notes", "Special requests (crew only)", type="textarea", section="Notes",
           help="On crew worksheets. Never shown to the client."),
     Field("notes", "Office notes", type="textarea", section="Notes", help="Only visible when signed in."),
 ]
+
+
+def event_fields(type_name):
+    """EVENT_FIELDS with the key-people label for the given event type."""
+    t = services.event_type(type_name)
+    fields = []
+    for f in EVENT_FIELDS:
+        if f.name == "honorees" and t and t["people_label"]:
+            f = copy.copy(f)
+            f.label = t["people_label"]
+        fields.append(f)
+    return fields
+
 
 CREW_FIELDS = [
     Field("crew_id", "Crew member", type="fk", required=True,
@@ -116,8 +154,12 @@ def _back(event_id, tab, anchor=None):
 def index():
     q = request.args.get("q", "").strip()
     status = request.args.get("status", "")
+    etype = request.args.get("type", "")
     when = request.args.get("when", "upcoming")
     where, args = [], []
+    if etype:
+        where.append("e.event_type = ?")
+        args.append(etype)
     if q:
         where.append("(e.title LIKE ? OR e.reference_number LIKE ? OR c.name LIKE ? OR v.name LIKE ? "
                      "OR e.performers LIKE ? OR e.honorees LIKE ?)")
@@ -151,7 +193,7 @@ def index():
         args,
     )
     return render_template("events/list.html", events=events, q=q, status=status, when=when,
-                           statuses=util.EVENT_STATUSES)
+                           statuses=util.EVENT_STATUSES, etype=etype, types=event_type_choices())
 
 
 @bp.route("/calendar")
@@ -195,24 +237,30 @@ def calendar():
 @bp.route("/events/new", methods=["GET", "POST"])
 def new():
     templates = db.query("SELECT * FROM checklist_templates ORDER BY id")
+    profiles = services.event_type_profiles()
+    type_name = request.values.get("event_type") or request.args.get("type") or ""
+    profile = profiles.get(type_name, profiles[""])
     values = {"status": "inquiry", "event_date": request.args.get("date", ""),
-              "run_of_show": db.get_setting("run_of_show_template")}
+              "event_type": type_name if type_name in profiles else "", "run_of_show": profile["run_of_show"]}
+    selected = [str(i) for i in profile["checklists"]]
     errors = {}
     if request.method == "POST":
         values, errors = forms.parse(EVENT_FIELDS, request.form)
         _validate_dates(values, errors)
+        selected = request.form.getlist("templates")
         if not errors:
             client = db.query("SELECT name FROM clients WHERE id = ?", (values["client_id"],), one=True)
             values["reference_number"] = _unique_reference(values["event_date"], client and client["name"], values["title"])
             event_id = db.insert("events", values)
-            for template_id in request.form.getlist("templates"):
-                services.apply_checklist_template(event_id, int(template_id))
+            # Apply in the event type's order (office advance first, then type-specific, then show day...).
+            order = {tid: n for n, tid in enumerate(profile["checklists"])}
+            for template_id in sorted({int(t) for t in selected}, key=lambda t: (order.get(t, len(order)), t)):
+                services.apply_checklist_template(event_id, template_id)
             flash(f"Event {values['reference_number']} created.", "ok")
             return redirect(url_for("events.detail", event_id=event_id))
     return render_template("events/form.html", event=None, values=values, errors=errors,
-                           grouped=forms.sections(EVENT_FIELDS), templates=templates,
-                           selected_templates=[str(t["id"]) for t in templates] if request.method == "GET"
-                           else request.form.getlist("templates"))
+                           grouped=forms.sections(event_fields(values.get("event_type"))), templates=templates,
+                           selected_templates=selected, profiles=profiles)
 
 
 def _unique_reference(event_date, client_name, title):
@@ -235,7 +283,8 @@ def edit(event_id):
             flash("Event saved.", "ok")
             return redirect(url_for("events.detail", event_id=event_id))
     return render_template("events/form.html", event=event, values=values, errors=errors,
-                           grouped=forms.sections(EVENT_FIELDS), templates=[], selected_templates=[])
+                           grouped=forms.sections(event_fields(values.get("event_type"))), templates=[],
+                           selected_templates=[], profiles=services.event_type_profiles())
 
 
 @bp.route("/events/<int:event_id>/status", methods=["POST"])
@@ -349,11 +398,12 @@ def detail(event_id):
     if tab == "checklist":
         ctx["templates"] = db.query("SELECT * FROM checklist_templates ORDER BY id")
     ctx["gear_groups"] = _group(gear, services.gear_category)
-    ctx["checklist_groups"] = _group(checklist, lambda c: c["section"] or "General")
+    ctx["checklist_groups"] = _group_sections(checklist)
     return render_template("events/detail.html", **ctx, gear_label=services.gear_label)
 
 
 def _group(rows, key):
+    """Group consecutive rows by key (rows arrive sorted by it)."""
     groups = []
     for row in rows:
         k = key(row)
@@ -361,6 +411,15 @@ def _group(rows, key):
             groups.append((k, []))
         groups[-1][1].append(row)
     return groups
+
+
+def _group_sections(items):
+    """Group checklist items by section, merging sections that repeat across
+    templates (e.g. two "Show" sections) and keeping first-seen order."""
+    groups = {}
+    for item in items:
+        groups.setdefault(item["section"] or "General", []).append(item)
+    return list(groups.items())
 
 
 @bp.route("/events/<int:event_id>/worksheet")
@@ -385,7 +444,24 @@ def _people_and_places(event):
     return dict(
         client=client, venue=venue, venue_address=services.venue_address(venue),
         venue2=venue2, venue2_address=services.venue_address(venue2), producer=producer,
+        labels=services.event_labels(event), logistics=_logistics(event, venue, venue2),
     )
+
+
+def _logistics(event, venue, venue2):
+    """Load-in, parking, power and stage notes from the event and each venue."""
+    items = [("Parking & load-in", event["parking"], "pin"), ("Power", event["power_notes"], "bolt")]
+    for v in (venue, venue2):
+        if v is None:
+            continue
+        where = f" — {v['name']}" if venue and venue2 else ""
+        items += [
+            (f"Venue load-in{where}", v["load_in_notes"], "pin"),
+            (f"Venue parking{where}", v["parking_notes"], "pin"),
+            (f"Venue power{where}", v["power_notes"], "bolt"),
+            (f"Stage{where}", v["stage_notes"], "pin"),
+        ]
+    return [i for i in items if i[1]]
 
 
 def event_messages(event_id):
@@ -408,7 +484,7 @@ def worksheet_context(event, assignment):
         **_people_and_places(event),
         event=event, crew=crew, assignment=assignment, booking_status=BOOKING_STATUS[event["status"]],
         gear_groups=_group(gear, services.gear_category), gear_label=services.gear_label,
-        checklist_groups=_group(checklist, lambda c: c["section"] or "General"),
+        checklist_groups=_group_sections(checklist),
         messages=event_messages(event["id"]),
         settings=db.get_settings(),
     )

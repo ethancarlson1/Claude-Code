@@ -1,0 +1,8 @@
+{# Sound reinforcement numbers at a glance; used on worksheets and the event overview. #}
+{% set specs = [('Service', event.service_type), ('Setting', event.setting), ('Audience', event.guest_count),
+                ('Inputs', event.input_count), ('Wireless mics', event.wireless_count), ('Monitor mixes', event.monitor_mixes)] %}
+{% if specs|selectattr(1)|list %}
+<div class="specs">
+  {% for label, value in specs if value %}<div class="spec"><span class="spec-label">{{ label }}</span><span class="spec-value">{{ value }}</span></div>{% endfor %}
+</div>
+{% endif %}

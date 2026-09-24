@@ -135,6 +135,83 @@ def delete_checklist(template_id):
     return redirect(url_for("settings.checklists"))
 
 
+# --- Event types ---------------------------------------------------------------
+
+@bp.route("/settings/event-types")
+def event_types():
+    types = db.query(
+        """SELECT t.*, (SELECT COUNT(*) FROM events e WHERE e.event_type = t.name) AS event_count
+           FROM event_types t ORDER BY t.sort, t.name"""
+    )
+    checklists = {}
+    for r in db.query(
+        """SELECT x.event_type_id, c.name FROM event_type_checklists x
+           JOIN checklist_templates c ON c.id = x.template_id ORDER BY x.sort, c.id"""
+    ):
+        checklists.setdefault(r["event_type_id"], []).append(r["name"])
+    return render_template("settings/event_types.html", types=types, checklists=checklists)
+
+
+@bp.route("/settings/event-types/new", methods=["GET", "POST"])
+@bp.route("/settings/event-types/<int:type_id>", methods=["GET", "POST"])
+def event_type_form(type_id=None):
+    etype = None
+    if type_id:
+        etype = db.query("SELECT * FROM event_types WHERE id = ?", (type_id,), one=True)
+        if etype is None:
+            abort(404)
+    linked = services.event_type_checklist_ids(type_id) if etype else []
+    values = dict(etype) if etype else {"run_of_show": db.get_setting("run_of_show_template")}
+    error = None
+    if request.method == "POST":
+        values = {k: request.form.get(k, "").strip() for k in ("name", "people_label", "venue_label", "venue2_label")}
+        values["run_of_show"] = request.form.get("run_of_show", "")
+        chosen = [int(i) for i in request.form.getlist("checklists") if i.isdigit()]
+        clash = db.scalar("SELECT id FROM event_types WHERE name = ? AND id != ?", (values["name"], type_id or -1))
+        if not values["name"]:
+            error = "Give the event type a name."
+        elif clash:
+            error = "There's already an event type with that name."
+        else:
+            conn = db.get_db()
+            if etype:
+                conn.execute(
+                    "UPDATE event_types SET name = ?, people_label = ?, venue_label = ?, venue2_label = ?, "
+                    "run_of_show = ? WHERE id = ?",
+                    (*values.values(), type_id),
+                )
+                if values["name"] != etype["name"]:
+                    conn.execute("UPDATE events SET event_type = ? WHERE event_type = ?", (values["name"], etype["name"]))
+                conn.execute("DELETE FROM event_type_checklists WHERE event_type_id = ?", (type_id,))
+            else:
+                sort = conn.execute("SELECT COALESCE(MAX(sort), -1) + 1 FROM event_types").fetchone()[0]
+                type_id = conn.execute(
+                    "INSERT INTO event_types (name, people_label, venue_label, venue2_label, run_of_show, sort) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (*values.values(), sort),
+                ).lastrowid
+            # Keep the existing order for checklists that were already linked; append new ones.
+            ordered = [t for t in linked if t in chosen] + [t for t in chosen if t not in linked]
+            conn.executemany(
+                "INSERT INTO event_type_checklists (event_type_id, template_id, sort) VALUES (?, ?, ?)",
+                [(type_id, t, n) for n, t in enumerate(ordered)],
+            )
+            conn.commit()
+            flash(f"Saved event type '{values['name']}'.", "ok")
+            return redirect(url_for("settings.event_types"))
+        linked = chosen
+    templates = db.query("SELECT * FROM checklist_templates ORDER BY id")
+    return render_template("settings/event_type_form.html", etype=etype, values=values, error=error,
+                           templates=templates, linked=linked)
+
+
+@bp.route("/settings/event-types/<int:type_id>/delete", methods=["POST"])
+def delete_event_type(type_id):
+    db.execute("DELETE FROM event_types WHERE id = ?", (type_id,))
+    flash("Event type deleted. Events that used it keep their type name.", "ok")
+    return redirect(url_for("settings.event_types"))
+
+
 # --- Users -------------------------------------------------------------------
 
 @bp.route("/settings/users", methods=["GET", "POST"])

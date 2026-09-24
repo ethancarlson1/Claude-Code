@@ -2,15 +2,48 @@
 
 The operations platform for Chicago Sound and Backline. It keeps the schedule, the gear inventory, each event's audio and backline needs (with pull/load/return checklists), crew worksheets, contracts and invoices in one place.
 
+It covers the full range of sound reinforcement work: corporate programs and keynotes, live concerts and club shows, festivals, private parties, galas, weddings, theater, worship and backline dry hire.
+
 It is a small Flask + SQLite app: one Python dependency, one database file, no build step.
 
 ## Features
 
+**Event types**
+
+Each type is editable under Settings → Event types. A type sets:
+- what the event's key people are called
+- default names for its two locations
+- the run-of-show starter
+- the checklists a new event starts with
+
+Picking a type on the event form updates all four as you choose.
+
+| Type | Key people | Locations | Starts with |
+| --- | --- | --- | --- |
+| Corporate / Speaking | Speakers / presenters | General session · Breakout room | Agenda + presenter mic plan; Corporate & Speaking checklist |
+| Live Concert / Club / Bar Show | Artists / headliner | Main stage · Second stage | Set times; Live Concert checklist (stage plot, rider, monitor mixes, changeovers) |
+| Festival / Outdoor | Headliners | Main stage · Second stage | Stage schedule + weather plan; Live Concert + Outdoor Event checklists |
+| Private Party | Host / guest of honor | Party space | Toasts, DJ, volume plan; Party & Private Event checklist |
+| Fundraiser / Gala | Honorees / speakers | Ballroom · Reception area | Program with auction; Corporate & Speaking checklist |
+| Wedding | Couple | Reception · Ceremony | Ceremony / cocktail / reception run of show; Wedding checklist |
+| Theater / Performance, Worship / Community | Performers / company, Officiant / speakers | Theater, Sanctuary / hall | Show or service order |
+| Backline / Dry Hire | Renting artist / client contact | Delivery location | Delivery, walkthrough and pickup; Dry Hire checklist |
+
+**Sound reinforcement specs** on every event:
+- service (full production, PA + engineer, backline + tech, backline only, or dry hire)
+- indoor / outdoor
+- audience size
+- inputs, wireless mics and monitor mixes
+- playback and record/stream feeds
+
+The specs appear as quick-reference tiles on the event page and crew worksheets.
+
 **Scheduling**
 - Events with a readable reference number (`2026-10-10-Alvarez-Sofia-RBYC`) and a status (inquiry, hold, confirmed, completed or cancelled).
-- Each event records the client, the couple or honorees, guest count and a **producer** (the crew's point person).
-- Up to two locations per event, e.g. a ceremony and a reception.
-- A day-of timeline (load-in, setup complete, doors, show, end, load-out) plus a free-form **run of show**. New events start from a run-of-show template.
+- Each event records the client, its key people (speakers, headliner, host, couple…), performers, and a **producer** (the crew's point person).
+- Up to two locations per event, e.g. a general session and a breakout room, two stages, or a ceremony and a reception.
+- A day-of timeline (load-in/delivery, setup complete, doors, show or program start and end, load-out/pickup) plus a free-form **run of show** that starts from the event type's template. Events can span multiple days.
+- The events list can be filtered by type.
 - A month calendar, a searchable event list, and a dashboard that flags what needs attention in the next 14 days: unconfirmed crew, missing gear lists, gear not pulled, open checklists, gear conflicts, gear not returned, unsigned contracts and overdue invoices.
 - "Add to calendar" (.ics) for the office and for each crew member.
 
@@ -20,12 +53,12 @@ These are modeled on the per-musician gig worksheet a band sends its players. Ea
 
 | Section | What's in it |
 | --- | --- |
-| Basic info | Booking status, date and Add to iCal, event type, the producer with Call/Text/Email buttons, dress code, guest count, couple/client, terms of use, payment (their own pay only), and event timings ("You are on A1 / FOH…") |
-| Location & venue | Each location with Open in Maps, venue manager contacts, day-of contact |
+| Basic info | Booking status, date and Add to iCal, event type and service, the producer with Call/Text/Email buttons, dress code, audience size, key people (labelled by type), client, terms of use, payment (their own pay only), and event timings ("You are on A1 / FOH…") |
+| Location & venue | Each location, with type-appropriate labels and Open in Maps; venue manager contacts; day-of contact |
 | Crew | Roster with role, call time, phone and dietary notes, plus the crew meal |
 | Special requests | Crew-only notes. Clients never see these. |
-| Schedule | Timings, the run of show, and load-in, parking and power notes from the event and the venue |
-| Audio & backline | The gear list with Pulled / Loaded / Returned boxes |
+| Schedule | Timings, the run of show, and load-in, parking and power notes from the event and each venue |
+| Audio & backline | Spec tiles (service, setting, audience, inputs, wireless, mixes), playback and feeds, and the gear list with Pulled / Loaded / Returned boxes |
 | Crew checklist | Crew-visible checklist items only. Office items like "Deposit received" are hidden. |
 | Additional notes & FAQs | Standing company policies (call time, power, hard surfaces, weather, meals, gear) |
 | Crew chat | A message thread shared by the crew, the producer and the office |
@@ -39,7 +72,10 @@ Crew can accept or decline the call from the page. The office copy of the worksh
 - **Warehouse checklist:** every gear line has Pulled / Loaded / Returned checkboxes and return/damage notes. Items still out after a show appear on the dashboard.
 
 **Checklists**
-- Reusable templates with sections, each marked "show on crew worksheets" or office-only. Three ship with the app: Advance & Prep (office), Show Day, and Load-Out & Return. Ticking an item records who did it and when.
+- Reusable templates with sections, each marked "show on crew worksheets" or office-only. The app ships with:
+  - general: Advance & Prep (office), Show Day, Load-Out & Return
+  - by kind of work: Corporate & Speaking, Live Concert, Party & Private Event, Wedding, Outdoor Event, Dry Hire / Backline Rental
+- Each event type picks its starting set. Ticking an item records who did it and when.
 
 **Contracts**
 - Generated from an editable template with merge fields (client, venue, times, gear list, total, deposit, due dates). The total is pre-filled from the gear rental value.
@@ -65,13 +101,22 @@ flask --app backline run         # http://127.0.0.1:5000
 On first visit you'll create the admin account. The company name is pre-filled as Chicago Sound and Backline. Under **Settings** you can set:
 - company details and billing defaults
 - the contract template
-- the crew worksheet text: terms of use, payment, additional notes & FAQs, and the run-of-show starter
+- the crew worksheet text: terms of use, payment, and additional notes & FAQs
+- event types
+- checklist templates
 
 The demo data is dated relative to today:
-- An Alvarez / Reed wedding with a ceremony at Maplewood Chapel and a reception at Riverbend Country Club. It has a full run of show, special requests and crew chat.
-- A Fulton Market corporate show.
-- A Lakefront festival hold that conflicts with a Blue Door Lounge gig over Twin Reverbs.
-- An overdue invoice and a cymbal pack that was never returned.
+
+| Event | Type | What it shows |
+| --- | --- | --- |
+| Northbeam Q3 All-Hands | Corporate / Speaking | Presenter mic assignments, record feed to the video team, full agenda |
+| The Midnight Arcade rehearsal backline | Backline / Dry Hire | Delivery and pickup, no operator |
+| Alvarez / Reed Wedding | Wedding | Ceremony + reception, run of show modeled on a band worksheet |
+| Jamal's 40th Birthday | Private Party | Small PA + DJ, toasts, quiet hours |
+| Lakefront Harvest Festival | Festival / Outdoor | 3-day outdoor hold that conflicts with a concert over Twin Reverbs |
+| The Velvet Owls at Blue Door Lounge | Live Concert | Backline + tech on a house PA, set times with an opener |
+| Blue Door Showcase | Club / Bar Show | Past show: overdue invoice, cymbal pack never returned |
+| Lakeview Youth Arts Spring Gala | Fundraiser / Gala | Inquiry awaiting a quote |
 
 All demo people, venues, phone numbers (555-01xx) and emails are fictional.
 
@@ -82,7 +127,7 @@ flask --app backline create-user <username>   # add a login from the shell
 flask --app backline init-db                  # create/upgrade tables (also runs automatically on startup)
 ```
 
-Upgrading an existing database needs no extra step. New columns are added on startup, and a database still using the old placeholder company name is renamed to Chicago Sound and Backline.
+Upgrading an existing database needs no extra step. On startup, new columns are added and the new default checklists and event types are filled in once. Old type names like "Concert" map to their new equivalents. A database still using the old placeholder company name is renamed to Chicago Sound and Backline.
 
 ## Running it for real
 
@@ -115,9 +160,10 @@ The suite covers:
 - checklist and gear toggles
 - invoice math and statuses
 - the contract signing flow
+- event types driving labels, the run-of-show starter, checklists (applied in order) and specs, plus managing types
 - worksheet sections and privacy: only the viewer's own pay, crew-only notes kept from clients, office-only checklist items hidden
 - crew chat and calendar invites
-- the database migration
+- the database migration from a real first-release database
 - CSV import
 - a render check of every page against the demo data
 
@@ -127,7 +173,8 @@ The suite covers:
 backline/
   __init__.py        app factory
   schema.sql         tables
-  db.py              database helpers, migrations, default settings/checklists/contract + worksheet text
+  db.py              database helpers, migrations, one-time seeding of defaults
+  defaults.py        default settings, contract + worksheet text, checklists, event types
   auth.py            login, first-run setup, CSRF
   forms.py           declarative form fields + validation
   services.py        gear availability, totals, invoice math, contract rendering, iCal export

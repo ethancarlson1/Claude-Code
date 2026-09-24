@@ -184,6 +184,60 @@ def apply_checklist_template(event_id, template_id):
     return len(items)
 
 
+# --- Event types ---------------------------------------------------------------
+
+def event_type(name):
+    if not name:
+        return None
+    return db.query("SELECT * FROM event_types WHERE name = ?", (name,), one=True)
+
+
+def event_type_checklist_ids(type_id):
+    return [r["template_id"] for r in db.query(
+        "SELECT template_id FROM event_type_checklists WHERE event_type_id = ? ORDER BY sort, template_id",
+        (type_id,),
+    )]
+
+
+def default_checklist_ids():
+    """Checklists for an event with no type: the generic office + show day ones."""
+    names = ["Advance & Prep", "Show Day", "Load-Out & Return"]
+    rows = db.query(
+        f"SELECT id, name FROM checklist_templates WHERE name IN ({', '.join('?' for _ in names)})", names
+    )
+    by_name = {r["name"]: r["id"] for r in rows}
+    return [by_name[n] for n in names if n in by_name]
+
+
+def event_type_profiles():
+    """Everything the event form needs to adapt to the chosen type, keyed by
+    type name ("" = no type chosen)."""
+    profiles = {"": {
+        "people_label": "Key people", "venue_label": "", "venue2_label": "",
+        "run_of_show": db.get_setting("run_of_show_template") or "", "checklists": default_checklist_ids(),
+    }}
+    for t in db.query("SELECT * FROM event_types ORDER BY sort, name"):
+        profiles[t["name"]] = {
+            "people_label": t["people_label"] or "Key people",
+            "venue_label": t["venue_label"] or "",
+            "venue2_label": t["venue2_label"] or "",
+            "run_of_show": t["run_of_show"] or profiles[""]["run_of_show"],
+            "checklists": event_type_checklist_ids(t["id"]),
+        }
+    return profiles
+
+
+def event_labels(event):
+    """Display labels for an event's key people and locations, falling back
+    from the event's own labels to its type's defaults."""
+    t = event_type(event["event_type"])
+    return {
+        "people": (t and t["people_label"]) or "Key people",
+        "venue": event["venue_label"] or (t and t["venue_label"]) or "Venue",
+        "venue2": event["venue2_label"] or (t and t["venue2_label"]) or "Second location",
+    }
+
+
 # --- Invoices ----------------------------------------------------------------
 
 def invoice_totals(invoice, items=None, payments=None):
@@ -276,6 +330,8 @@ MERGE_FIELDS = [
     ("client_name", "Client name"),
     ("client_company", "Client company"),
     ("event_title", "Event title"),
+    ("event_type", "Event type, e.g. Corporate / Speaking"),
+    ("service_type", "Service, e.g. PA + engineer"),
     ("event_date", "Event date (and end date for multi-day)"),
     ("venue_name", "Venue name"),
     ("venue_address", "Venue address"),
@@ -321,6 +377,8 @@ def render_contract(template, event, number, total, deposit, deposit_due, balanc
         "client_name": client["name"] if client else "",
         "client_company": (client["company"] or "") if client else "",
         "event_title": event["title"],
+        "event_type": event["event_type"] or "Event",
+        "service_type": event["service_type"] or "Audio and backline as listed below",
         "event_date": date_text,
         "venue_name": venue["name"] if venue else "TBD",
         "venue_address": venue_address(venue),

@@ -11,6 +11,10 @@
       <option value="{{ v }}" {% if when == v %}selected{% endif %}>{{ l }}</option>
     {% endfor %}
   </select>
+  <select name="type">
+    <option value="">All event types</option>
+    {% for t in types %}<option {% if etype == t %}selected{% endif %}>{{ t }}</option>{% endfor %}
+  </select>
   <select name="status">
     <option value="">Any status</option>
     {% for s in statuses %}<option value="{{ s }}" {% if status == s %}selected{% endif %}>{{ s|title }}</option>{% endfor %}
@@ -31,7 +35,7 @@
         <td class="nowrap">{{ e.event_date|fdate }}{% if e.end_date %}<div class="small muted">to {{ e.end_date|fdate('short') }}</div>{% endif %}
           {% if e.start_time %}<div class="small muted">{{ e.start_time|ftime }}</div>{% endif %}</td>
         <td><a href="{{ url_for('events.detail', event_id=e.id) }}"><strong>{{ e.title }}</strong></a>
-          <div class="small muted mono">{{ e.reference_number }}</div></td>
+          <div class="small muted">{% if e.event_type %}{{ e.event_type }} · {% endif %}<span class="mono">{{ e.reference_number }}</span></div></td>
         <td>{{ e.client_name or '—' }}</td>
         <td>{{ e.venue_name or '—' }}{% if e.venue_city %}<div class="small muted">{{ e.venue_city }}</div>{% endif %}</td>
         <td>{{ badge(e.status) }}</td>

@@ -13,7 +13,7 @@
   {% if templates %}
   <fieldset class="card">
     <legend>Checklists</legend>
-    <p class="muted small">Start this event with these checklists. You can add or remove items later.</p>
+    <p class="muted small">Start this event with these checklists. The event type picks sensible ones; you can add or remove items later.</p>
     {% for t in templates %}
       <label class="check"><input type="checkbox" name="templates" value="{{ t.id }}" {% if t.id|string in selected_templates %}checked{% endif %}> {{ t.name }} <span class="muted small">— {{ t.description }}</span></label>
     {% endfor %}
@@ -25,4 +25,5 @@
     <a class="btn" href="{{ url_for('events.detail', event_id=event.id) if event else url_for('events.index') }}">Cancel</a>
   </div>
 </form>
+<script type="application/json" id="event-type-profiles">{{ profiles|tojson }}</script>
 {% endblock %}

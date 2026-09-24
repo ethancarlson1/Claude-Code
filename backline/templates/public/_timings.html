@@ -1,7 +1,7 @@
 {% if assignment %}<div>You are on <strong>{{ assignment.role or 'crew' }}</strong>.</div>{% endif %}
 <ul class="timings">
   {% if assignment and assignment.call_time %}<li><strong>{{ assignment.call_time|ftime }}</strong> — Your call time</li>{% endif %}
-  {% for key, label in [('load_in_time', 'Load-in'), ('soundcheck_time', 'Set up completed / soundcheck'), ('doors_time', 'Doors / guests arrive'), ('start_time', 'Show starts'), ('end_time', 'Show ends'), ('load_out_time', 'Load-out')] %}
+  {% for key, label in [('load_in_time', 'Load-in / delivery'), ('soundcheck_time', 'Set up completed / soundcheck'), ('doors_time', 'Doors / guests arrive'), ('start_time', 'Show / program starts'), ('end_time', 'Show / program ends'), ('load_out_time', 'Load-out / pickup')] %}
     {% if event[key] %}<li><strong>{{ event[key]|ftime }}</strong> — {{ label }}</li>{% endif %}
   {% endfor %}
 </ul>

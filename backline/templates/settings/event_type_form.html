@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf %}
+{% block title %}{{ etype.name if etype else 'New event type' }}{% endblock %}
+{% block heading %}<h1>{{ 'Edit ' ~ etype.name if etype else 'New event type' }}</h1>{% endblock %}
+{% block content %}
+<form method="post" class="card" style="max-width:860px">
+  {{ csrf() }}
+  {% if error %}<div class="flash flash-bad">{{ error }}</div>{% endif %}
+  <div class="grid-form">
+    <div class="field"><label for="name">Name <span class="req">*</span></label><input id="name" name="name" value="{{ values.name or '' }}" required placeholder="e.g. Conference / Multi-room"></div>
+    <div class="field"><label for="people_label">Key people label</label><input id="people_label" name="people_label" value="{{ values.people_label or '' }}" placeholder="e.g. Speakers / presenters"><div class="help">What the event's key people are called on forms and worksheets.</div></div>
+    <div class="field"><label for="venue_label">Main location label</label><input id="venue_label" name="venue_label" value="{{ values.venue_label or '' }}" placeholder="e.g. Main stage"></div>
+    <div class="field"><label for="venue2_label">Second location label</label><input id="venue2_label" name="venue2_label" value="{{ values.venue2_label or '' }}" placeholder="e.g. Breakout room"></div>
+    <div class="field wide"><label for="run_of_show">Run-of-show starter</label>
+      <textarea id="run_of_show" name="run_of_show" rows="16" class="mono">{{ values.run_of_show or '' }}</textarea>
+      <div class="help">New events of this type start with this text.</div></div>
+    <div class="field wide"><label>Starting checklists</label>
+      {% for t in templates %}
+        <label class="check"><input type="checkbox" name="checklists" value="{{ t.id }}" {% if t.id in linked %}checked{% endif %}> {{ t.name }}
+          <span class="muted small">— {{ t.description or '' }}{% if not t.crew_visible %} (office only){% endif %}</span></label>
+      {% endfor %}
+      <div class="help"><a href="{{ url_for('settings.checklists') }}">Manage checklist templates</a></div>
+    </div>
+  </div>
+  {% if etype %}<p class="help">Renaming a type updates the events that use it.</p>{% endif %}
+  <div class="form-actions">
+    <button class="btn btn-primary" type="submit">Save event type</button>
+    <a class="btn" href="{{ url_for('settings.event_types') }}">Cancel</a>
+  </div>
+</form>
+{% endblock %}

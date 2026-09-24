@@ -61,6 +61,9 @@ CLIENTS = [
     ("Priya Shah", "Northbeam Corporate Events", "priya@example.com", "(312) 555-0143"),
     ("Lakefront Harvest Festival", "Lakefront Harvest Music Festival LLC", "production@example.com", "(312) 555-0144"),
     ("Ruby Carter", "The Velvet Owls", "ruby@example.com", "(773) 555-0145"),
+    ("Jamal Wright", None, "jamal@example.com", "(773) 555-0146"),
+    ("Leah Park", "The Midnight Arcade (touring)", "leah@example.com", "(312) 555-0147"),
+    ("Lakeview Youth Arts Fund", "Lakeview Youth Arts Fund", "events@example.com", "(773) 555-0148"),
 ]
 
 VENUES = [
@@ -87,6 +90,15 @@ VENUES = [
          contact_name="Eli (GM)", contact_phone="(773) 555-0154",
          load_in_notes="Front door only, 3 steps. Loading zone on Milwaukee after 4 PM.",
          stage_notes="16' x 12' stage. House console is a Midas M32; we bring backline only unless noted."),
+    dict(name="Northside Rehearsal Studios", address="N Ravenswood Ave", city="Chicago", state="IL",
+         contact_name="Front desk", contact_phone="(773) 555-0155",
+         load_in_notes="Ground-floor roll-up door on the alley. Room B is at the end of the hall."),
+    dict(name="Pilsen Rooftop Loft", address="W 18th St", city="Chicago", state="IL",
+         contact_name="Marisol (events)", contact_phone="(312) 555-0156",
+         load_in_notes="Freight elevator to the 5th floor, then 20 ft push to the roof deck door.",
+         power_notes="Two 20A circuits inside by the bar; one outdoor 20A GFCI on the deck (use indoor circuits for audio).",
+         parking_notes="Street parking only; unload on Halsted side, then move the van.",
+         stage_notes="No stage. DJ table by the windows; speakers on sticks inside, one pair of fills on the deck."),
 ]
 
 
@@ -100,8 +112,8 @@ def _add_gear(event_id, items):
         row = {"event_id": event_id, "quantity": qty, "sort": sort, "notes": rest[0] if rest else None}
         if item:
             row.update(item_id=item["id"], rate=item["rental_rate"])
-        else:
-            row.update(description=name, category="Keyboards", rate=None)
+        else:  # sub-rental / not stocked: (name, qty, notes, category)
+            row.update(description=name, category=rest[1] if len(rest) > 1 else "Other", rate=None)
         db.insert("event_gear", row)
 
 
@@ -174,9 +186,42 @@ def _invoice(event_id, status, issue, due, payments=()):
     return invoice_id
 
 
+def _apply_type_checklists(event_id, type_name):
+    etype = services.event_type(type_name)
+    for template_id in services.event_type_checklist_ids(etype["id"]):
+        services.apply_checklist_template(event_id, template_id)
+
+
 def _next_saturday(after):
     return after + timedelta(days=(5 - after.weekday()) % 7)
 
+
+CORPORATE_RUN_OF_SHOW = """\
+LOAD-IN / ACCESS:
+Alley dock off N Carpenter St until 8 AM, then freight elevator to the 3rd floor.
+
+POWER:
+60A disconnect stage left for the PA; tech table on the 20A circuit by the back wall.
+
+AV PARTNERS:
+Video: Brightline Media runs cameras and the switcher. Our 2-ch record feed lands at their switcher (XLR, line level).
+
+PRESENTERS & MICS:
+- Host (Priya Shah): handheld 1
+- CEO keynote (Dr. Alana Brooks): lav 1, spare lav live at FOH
+- Leadership panel: lavs 2-4
+- Audience Q&A: aisle handhelds 5-6
+
+AGENDA:
+- 9:30 AM  Tech check with presenters, walk-in music
+- 10:30 AM Doors
+- 11:00 AM Welcome (host)
+- 11:10 AM CEO keynote
+- 12:00 PM Lunch (background playlist)
+- 1:00 PM  Leadership panel + Q&A
+- 2:45 PM  Close, walk-out music
+- 3:00 PM  Strike; off the dock by 3:30
+"""
 
 WEDDING_RUN_OF_SHOW = """\
 LOAD-IN / ACCESS:
@@ -239,37 +284,66 @@ def seed():
 
     client = {r["name"]: r["id"] for r in db.query("SELECT id, name FROM clients")}
     venue = {r["name"]: r["id"] for r in db.query("SELECT id, name FROM venues")}
-    templates = {r["name"]: r["id"] for r in db.query("SELECT id, name FROM checklist_templates")}
     today = util.today()
     day = lambda n: (today + timedelta(days=n)).isoformat()  # noqa: E731
     producer = _crew_id("Dana Kowalski")
 
-    # 1. Corporate event next week: confirmed, contract signed, deposit paid.
-    corp = _event(title="Northbeam Q3 All-Hands", event_type="Corporate", status="confirmed",
+    # 1. Corporate speaking program next week: confirmed, contract signed, deposit paid.
+    corp = _event(title="Northbeam Q3 All-Hands", event_type="Corporate / Speaking", status="confirmed",
                   client_id=client["Priya Shah"], venue_id=venue["Fulton Market Event Loft"], producer_id=producer,
-                  guest_count=400, event_date=day(5), load_in_time="07:00", soundcheck_time="09:30",
+                  honorees="Priya Shah (host): handheld 1\nDr. Alana Brooks, CEO keynote: lav 1 (spare lav live at FOH)\n"
+                           "Leadership panel (3): lavs 2-4\nAudience Q&A: aisle handhelds 5-6",
+                  service_type="PA + engineer", setting="Indoor", guest_count=400, input_count=14, wireless_count=8,
+                  monitor_mixes=1,
+                  playback_feeds="Laptop playback via DI (walk-in, walk-out, video audio)\n"
+                                 "2-ch record feed (XLR, line level) to Brightline Media's switcher",
+                  event_date=day(5), load_in_time="07:00", soundcheck_time="09:30",
                   doors_time="10:30", start_time="11:00", end_time="15:00", load_out_time="15:30",
                   on_site_contact="Priya Shah", on_site_phone="(312) 555-0143", attire="Business casual, all black",
-                  crew_meal="Boxed lunches at 11:30 AM in the green room",
-                  audio_notes="Podium mic + 4 wireless handhelds for Q&A. Playback from laptop via DI.\nPA covers 400 seated.",
-                  run_of_show="- 7:00 AM  Load in at the Carpenter St dock\n- 9:30 AM  Line check with the AV lead\n"
-                              "- 10:30 AM Doors\n- 11:00 AM Program starts\n- 3:00 PM  Program ends, strike")
-    _add_gear(corp, [("Allen & Heath SQ-6 console", 1), ("QSC K12.2 powered speaker", 4), ("QSC KS118 powered sub", 2),
-                     ("Shure ULXD2 / Beta 58 handheld", 4), ("Shure SM58", 2, "podium"), ("Radial ProDI passive DI", 2),
-                     ("XLR cable 25'", 16), ("K&M boom mic stand", 4)])
+                  crew_meal="Boxed lunches at 12:00 PM in the green room",
+                  audio_notes="PA covers 400 seated, two delay speakers at the back. Confidence wedge for the keynote.",
+                  run_of_show=CORPORATE_RUN_OF_SHOW)
+    _add_gear(corp, [("Allen & Heath SQ-6 console", 1), ("QSC K12.2 powered speaker", 4, "2 mains + 2 delays"),
+                     ("QSC KS118 powered sub", 2), ("QSC K10.2 wedge", 1, "confidence wedge"),
+                     ("Shure ULXD2 / Beta 58 handheld", 4), ("Shure SM58", 2, "podium + spare"),
+                     ("Radial ProDI passive DI", 2, "laptop playback"), ("XLR cable 25'", 16), ("K&M boom mic stand", 4)])
+    _add_gear(corp, [("Lavalier kits x4 (sub-rent)", 1, "Countryman B6 + ULXD1 packs; sub-rent from partner shop", "Wireless")])
     _add_crew(corp, "Maya Ortiz", "A1 / FOH", "07:00", confirmed=1)
+    _add_crew(corp, "Chris Bell", "A2 / mic wrangler", "08:30", confirmed=1)
     _add_crew(corp, "Sam Reyes", "Stagehand", "07:00", hours=9, confirmed=1)
-    for name in ("Advance & Prep", "Show Day"):
-        services.apply_checklist_template(corp, templates[name])
+    _apply_type_checklists(corp, "Corporate / Speaking")
     _tick(corp, 11)
+    _message(corp, "Maya Ortiz", "Brightline confirmed they want the record feed at line level on XLR. I'll bring two DI "
+             "boxes in case their switcher only has unbalanced inputs.", 60 * 30)
     _contract(corp, "signed")
     _invoice(corp, "sent", today - timedelta(days=20), today + timedelta(days=5),
              payments=[(today - timedelta(days=18), 800, "ACH / Bank Transfer")])
 
-    # 2. Wedding with ceremony + reception, like a band's gig worksheet.
+    # 2. Dry hire: backline dropped off for a touring band's rehearsal day.
+    rental = _event(title="The Midnight Arcade — rehearsal backline", event_type="Backline / Dry Hire",
+                    status="confirmed", client_id=client["Leah Park"], venue_id=venue["Northside Rehearsal Studios"],
+                    honorees="Leah Park (tour manager)", service_type="Dry hire (drop-off & pickup)", setting="Indoor",
+                    event_date=day(8), end_date=day(9), load_in_time="10:00", load_out_time="12:00",
+                    on_site_contact="Leah Park", on_site_phone="(312) 555-0147",
+                    backline_notes="Drummer brings cymbals and pedal. Keys player wants the Nord with a sustain pedal.",
+                    run_of_show="DELIVERY:\nRoom B, day 1 at 10:00 AM. Leah signs for the gear.\n\n"
+                                "WALKTHROUGH:\nQuick demo of the Nord and SVT settings for the band's tech.\n\n"
+                                "PICKUP:\nDay 2 at 12:00 PM from Room B.")
+    _add_gear(rental, [("Ludwig Classic Maple 4-pc kit", 1), ("Drum hardware pack", 1), ("Snare drum 14x6.5", 1),
+                       ("Fender '65 Twin Reverb", 1), ("Ampeg SVT-CL + SVT-810E", 1), ("Nord Stage 4 88", 1),
+                       ("Keyboard stand (double X)", 1)])
+    _add_crew(rental, "Jordan Pike", "Delivery + walkthrough", "09:00", confirmed=1)
+    _apply_type_checklists(rental, "Backline / Dry Hire")
+    _tick(rental, 7)
+    _contract(rental, "signed")
+
+    # 3. Wedding with ceremony + reception, like a band's gig worksheet.
     wedding_date = _next_saturday(today + timedelta(days=10)).isoformat()
     wedding = _event(title="Alvarez / Reed Wedding", event_type="Wedding", status="confirmed",
-                     client_id=client["Sofia Alvarez"], honorees="Sofia & Marcus", guest_count=225, producer_id=producer,
+                     client_id=client["Sofia Alvarez"], honorees="Sofia & Marcus", producer_id=producer,
+                     service_type="Full production (PA, backline, crew)", setting="Indoor", guest_count=225,
+                     input_count=24, wireless_count=4, monitor_mixes=6,
+                     playback_feeds="DJ on console ch 31/32. Ceremony music from the FOH laptop.",
                      venue_id=venue["Riverbend Country Club"], venue_label="Reception",
                      venue2_id=venue["Maplewood Chapel"], venue2_label="Ceremony",
                      event_date=wedding_date, load_in_time="13:00", soundcheck_time="16:30", doors_time="16:30",
@@ -282,7 +356,7 @@ def seed():
                      crew_notes="Couple asked for no visible cable runs down the chapel aisle. Run under the runner and gaff "
                                 "everything.\nMC duties are on the band leader; hand wireless 1 to them at 6:10 PM.\n"
                                 "Toasts: father of the bride, then maid of honor. Wireless 2 at the head table.",
-                     audio_notes="Ceremony: 2 wireless + small PA in the chapel. Reception: full band, 24 inputs, 6 mixes.",
+                     audio_notes="Ceremony: 2 wireless + small PA in the chapel. Reception: full band.",
                      backline_notes="Drummer brings snare + cymbals. Keys player needs 88-key weighted.")
     _add_gear(wedding, [("Midas M32 console", 1), ("QSC K12.2 powered speaker", 6, "2 go to the chapel"),
                         ("QSC KS118 powered sub", 2), ("QSC K10.2 wedge", 4),
@@ -297,7 +371,7 @@ def seed():
     _add_crew(wedding, "Chris Bell", "Ceremony audio, then A2", "13:30")
     _add_crew(wedding, "Jordan Pike", "Backline Tech", "14:00")
     _add_crew(wedding, "Sam Reyes", "Stagehand", "13:00", hours=10)
-    services.apply_checklist_template(wedding, templates["Advance & Prep"])
+    _apply_type_checklists(wedding, "Wedding")
     _tick(wedding, 6)
     _message(wedding, "Dana Kowalski", "Riverbend confirmed vendor access from 1:00 PM at the west service door. "
              "Crew parking is the gravel lot behind the maintenance building.", 60 * 26)
@@ -306,10 +380,30 @@ def seed():
     _contract(wedding, "sent")
     _invoice(wedding, "draft", today, util.parse_date(wedding_date) - timedelta(days=14))
 
-    # 3 + 4. Festival hold overlapping a club gig -> Twin Reverb conflict.
-    fest = _event(title="Lakefront Harvest Festival — Stage 2", event_type="Festival", status="hold",
+    # 4. Private party: small PA, DJ and toasts, indoor + roof deck.
+    party = _event(title="Jamal's 40th Birthday", event_type="Private Party", status="confirmed",
+                   client_id=client["Jamal Wright"], venue_id=venue["Pilsen Rooftop Loft"],
+                   honorees="Jamal Wright (guest of honor)\nToasts: his sister Nia, then best friend Andre",
+                   performers="DJ Kess", service_type="PA + engineer", setting="Indoor + outdoor", guest_count=120,
+                   input_count=6, wireless_count=2,
+                   playback_feeds="DJ controller into console ch 5/6. Backup playlist on the FOH laptop.",
+                   event_date=day(22), load_in_time="16:00", soundcheck_time="18:00", doors_time="19:00",
+                   start_time="19:00", end_time="23:30", load_out_time="00:30",
+                   on_site_contact="Jamal Wright", on_site_phone="(773) 555-0146", attire="All black, casual",
+                   crew_notes="Building quiet hours start at midnight: deck fills off at 11:30 PM sharp.")
+    _add_gear(party, [("QSC K12.2 powered speaker", 2), ("QSC KS118 powered sub", 1),
+                      ("Shure ULXD2 / Beta 58 handheld", 2, "toasts"), ("Radial J48 active DI", 1, "DJ"),
+                      ("XLR cable 25'", 8)])
+    _add_gear(party, [("Deck fill speakers (pair)", 1, "sub-rent; weather covers", "Speakers")])
+    _add_crew(party, "Chris Bell", "A1 / PA duty", "16:00", confirmed=1)
+    _apply_type_checklists(party, "Private Party")
+
+    # 5 + 6. Festival hold overlapping a concert -> Twin Reverb conflict.
+    fest = _event(title="Lakefront Harvest Festival — Stage 2", event_type="Festival / Outdoor", status="hold",
                   client_id=client["Lakefront Harvest Festival"], venue_id=venue["Lakefront Park Bandshell"],
-                  producer_id=producer, guest_count=3000,
+                  producer_id=producer, honorees="Six bands per day; headliners TBA by the festival",
+                  service_type="Full production (PA, backline, crew)", setting="Outdoor", guest_count=3000,
+                  input_count=32, wireless_count=4, monitor_mixes=8,
                   event_date=day(26), end_date=day(28), load_in_time="08:00", start_time="12:00", end_time="22:00",
                   load_out_time="22:30", backline_notes="Shared backline for 6 bands/day. Per rider: 2x Twin, 1x SVT, 2 kits.")
     _add_gear(fest, [("JBL SRX835P 3-way", 4), ("QSC KS118 powered sub", 2), ("QSC K10.2 wedge", 6),
@@ -318,22 +412,27 @@ def seed():
                      ("Drum riser 8x8", 2), ("Motion Labs 100A distro", 1)])
     _add_crew(fest, "Chris Bell", "A2 / Monitors", "08:00")
     _add_crew(fest, "Taylor Nguyen", "Drum Tech", "08:00")
-    services.apply_checklist_template(fest, templates["Advance & Prep"])
+    _apply_type_checklists(fest, "Festival / Outdoor")
 
-    club = _event(title="The Velvet Owls — Blue Door Lounge", event_type="Club Night", status="confirmed",
+    club = _event(title="The Velvet Owls — Blue Door Lounge", event_type="Live Concert", status="confirmed",
                   client_id=client["Ruby Carter"], venue_id=venue["Blue Door Lounge"], event_date=day(27),
+                  honorees="The Velvet Owls (headliner)\nOpener: Paper Lanterns (duo)",
+                  service_type="Backline + tech", setting="Indoor", guest_count=250, input_count=22, monitor_mixes=5,
                   load_in_time="17:00", soundcheck_time="18:00", doors_time="20:00", start_time="21:00",
-                  end_time="23:30", load_out_time="23:45", backline_notes="Two guitarists want Twins.")
+                  end_time="23:30", load_out_time="23:45", backline_notes="Two guitarists want Twins. House PA and console.",
+                  run_of_show="SET TIMES:\n- 5:00 PM  Load-in, backline set\n- 6:00 PM  Soundcheck: The Velvet Owls\n"
+                              "- 7:00 PM  Soundcheck: Paper Lanterns\n- 8:00 PM  Doors\n- 8:30 PM  Paper Lanterns (30 min)\n"
+                              "- 9:00 PM  Changeover (15 min)\n- 9:15 PM  The Velvet Owls (75 min)\n- 11:30 PM Curfew, strike")
     _add_gear(club, [("Fender '65 Twin Reverb", 2), ("Ampeg SVT-CL + SVT-810E", 1), ("Snare drum 14x6.5", 1),
                      ("Hammond XK-5 + Leslie 3300", 1)])
     _add_crew(club, "Jordan Pike", "Backline Tech", "17:00", confirmed=1)
-    services.apply_checklist_template(club, templates["Advance & Prep"])
+    _apply_type_checklists(club, "Live Concert")
     _tick(club, 3)
 
-    # 5. Past show: gear partly not returned, invoice overdue.
-    past = _event(title="Blue Door Showcase", event_type="Club Night", status="completed",
+    # 7. Past show: gear partly not returned, invoice overdue.
+    past = _event(title="Blue Door Showcase", event_type="Club / Bar Show", status="completed",
                   client_id=client["Ruby Carter"], venue_id=venue["Blue Door Lounge"], event_date=day(-10),
-                  load_in_time="17:00", start_time="20:00", end_time="23:00")
+                  service_type="Backline only", load_in_time="17:00", start_time="20:00", end_time="23:00")
     _add_gear(past, [("Fender Hot Rod Deluxe", 2), ("Aguilar Tone Hammer 500 + DB410", 1), ("Ludwig Classic Maple 4-pc kit", 1),
                      ("Zildjian K cymbal pack", 1)])
     db.execute("UPDATE event_gear SET pulled = 1, loaded = 1, returned = 1 WHERE event_id = ?", (past,))
@@ -342,6 +441,8 @@ def seed():
     _add_crew(past, "Jordan Pike", "Backline Tech", "17:00", confirmed=1)
     _invoice(past, "sent", today - timedelta(days=9), today - timedelta(days=2))
 
-    # 6. Inquiry with no details yet.
-    _event(title="Spring Gala", event_type="Private Party", status="inquiry", client_id=client["Priya Shah"],
-           event_date=day(45), notes="Asked for a quote on PA + 3-pc jazz backline.")
+    # 8. Gala inquiry with no details yet.
+    _event(title="Lakeview Youth Arts Spring Gala", event_type="Fundraiser / Gala", status="inquiry",
+           client_id=client["Lakeview Youth Arts Fund"], event_date=day(45), guest_count=300,
+           service_type="Full production (PA, backline, crew)",
+           notes="Asked for a quote: podium + 4 wireless for speakers and the auctioneer, jazz trio backline, dance set.")

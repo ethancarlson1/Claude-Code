@@ -91,6 +91,37 @@
     });
   }
 
+  // Event form: adapt labels, run of show and checklists to the event type.
+  var typeSelect = document.getElementById("f-event_type");
+  var profilesEl = document.getElementById("event-type-profiles");
+  if (typeSelect && profilesEl) {
+    var profiles = JSON.parse(profilesEl.textContent);
+    var profileFor = function (name) { return profiles[name] || profiles[""]; };
+    var prev = profileFor(typeSelect.value);
+    var applyLabels = function (p) {
+      var peopleLabel = document.querySelector('label[for="f-honorees"]');
+      if (peopleLabel) peopleLabel.textContent = p.people_label;
+      [["f-venue_label", p.venue_label || "Venue"], ["f-venue2_label", p.venue2_label || "Second location"]].forEach(function (pair) {
+        var input = document.getElementById(pair[0]);
+        if (input) input.placeholder = pair[1];
+      });
+    };
+    applyLabels(prev);
+    typeSelect.addEventListener("change", function () {
+      var next = profileFor(typeSelect.value);
+      applyLabels(next);
+      // Swap the run of show only if it's empty or still the previous starter.
+      var ros = document.getElementById("f-run_of_show");
+      if (ros && (!ros.value.trim() || ros.value.trim() === (prev.run_of_show || "").trim())) {
+        ros.value = next.run_of_show || "";
+      }
+      document.querySelectorAll('input[name="templates"]').forEach(function (box) {
+        box.checked = next.checklists.indexOf(parseInt(box.value, 10)) !== -1;
+      });
+      prev = next;
+    });
+  }
+
   // Invoice line-item editor
   var lines = document.querySelector("[data-lines]");
   if (lines) {

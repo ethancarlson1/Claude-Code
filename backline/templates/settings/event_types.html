@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% from "_macros.html" import delete_button %}
+{% block title %}Event types{% endblock %}
+{% block heading %}<h1>Settings</h1>{% endblock %}
+{% block actions %}<a class="btn btn-primary" href="{{ url_for('settings.event_type_form') }}">+ New event type</a>{% endblock %}
+{% block content %}
+{% include "settings/_tabs.html" %}
+<div class="card">
+  <p class="muted small">Each event type sets its own labels (e.g. "Speakers / presenters" vs. "Couple"), default location names, run-of-show starter and the checklists a new event starts with.</p>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Type</th><th>Key people label</th><th>Locations</th><th>Starting checklists</th><th class="num">Events</th><th></th></tr></thead>
+    <tbody>
+    {% for t in types %}
+      <tr>
+        <td><a href="{{ url_for('settings.event_type_form', type_id=t.id) }}"><strong>{{ t.name }}</strong></a></td>
+        <td>{{ t.people_label or 'Key people' }}</td>
+        <td class="small">{{ [t.venue_label, t.venue2_label]|select|join(' · ') or '—' }}</td>
+        <td class="small">{{ checklists.get(t.id, [])|join(', ') or '—' }}</td>
+        <td class="num"><a href="{{ url_for('events.index', type=t.name, when='all') }}">{{ t.event_count }}</a></td>
+        <td class="right">{{ delete_button(url_for('settings.delete_event_type', type_id=t.id), 'event type ' ~ t.name) }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6" class="muted">No event types yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% endblock %}

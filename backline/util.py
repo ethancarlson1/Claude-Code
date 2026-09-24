@@ -10,18 +10,6 @@ from flask import request
 EVENT_STATUSES = ["inquiry", "hold", "confirmed", "completed", "cancelled"]
 # Statuses that reserve gear for availability / conflict checks.
 RESERVING_STATUSES = ("hold", "confirmed")
-EVENT_TYPES = [
-    "Concert",
-    "Wedding",
-    "Corporate",
-    "Festival",
-    "Private Party",
-    "Club Night",
-    "Theater",
-    "Worship",
-    "Rehearsal",
-    "Other",
-]
 INVENTORY_CATEGORIES = [
     "Consoles",
     "Speakers",

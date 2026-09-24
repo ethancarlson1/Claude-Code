@@ -1,5 +1,4 @@
 import os
-import re
 import sqlite3
 
 from backline import create_app, util
@@ -9,7 +8,8 @@ from .conftest import query
 
 REF = "2030-11-02-Alvarez-Sofia-TJ1R"
 MIGRATED_COLUMNS = {"producer_id", "honorees", "guest_count", "venue_label", "venue2_id", "venue2_label",
-                    "crew_meal", "run_of_show", "crew_notes"}
+                    "crew_meal", "run_of_show", "crew_notes", "service_type", "setting", "input_count",
+                    "wireless_count", "monitor_mixes", "playback_feeds"}
 
 
 def _wedding(make):
@@ -128,24 +128,17 @@ def test_company_defaults_to_chicago_sound_and_backline(anon, ctx):
 
 
 def test_old_database_is_migrated(tmp_path):
+    """A database created by the first release upgrades in place on startup."""
     path = os.path.join(tmp_path, "old.db")
-    schema = open(os.path.join(os.path.dirname(dbm.__file__), "schema.sql")).read()
-    # Rebuild the first-release schema: no new columns, no chat table.
-    old_schema = "\n".join(
-        line for line in schema.splitlines()
-        if not re.match(r"\s*(" + "|".join(MIGRATED_COLUMNS | {"dietary", "crew_visible"}) + r")\s", line)
-    )
-    old_schema = re.sub(r",(\s*\n\);)", r"\1", old_schema)  # drop trailing commas left behind
-    old_schema = re.sub(r"-- Crew chat.*?\);\n", "", old_schema, flags=re.S)
     conn = sqlite3.connect(path)
-    conn.executescript(old_schema)
+    conn.executescript(open(os.path.join(os.path.dirname(__file__), "fixtures", "schema_v1.sql")).read())
     conn.execute("INSERT INTO settings (key, value) VALUES ('company_name', 'Your Audio & Backline Co.')")
-    conn.execute("INSERT INTO events (reference_number, title, event_date) VALUES ('R1', 'Old gig', '2030-01-01')")
+    conn.execute("INSERT INTO events (reference_number, title, event_date, event_type) "
+                 "VALUES ('R1', 'Old gig', '2030-01-01', 'Concert')")
     conn.execute("INSERT INTO checklist_templates (id, name) VALUES (1, 'Advance & Prep'), (2, 'Show Day')")
     conn.execute("INSERT INTO checklist_template_items (template_id, text) VALUES (1, 'Deposit received'), (2, 'Line check')")
     conn.execute("INSERT INTO event_checklist_items (event_id, text) VALUES (1, 'Deposit received'), (1, 'Line check')")
     conn.commit()
-    assert "run_of_show" not in {r[1] for r in conn.execute("PRAGMA table_info(events)")}
     conn.close()
 
     app = create_app({"TESTING": True, "DATABASE": path, "SECRET_KEY": "k"})
@@ -154,9 +147,21 @@ def test_old_database_is_migrated(tmp_path):
         assert MIGRATED_COLUMNS <= columns
         assert "dietary" in {r[1] for r in dbm.query("PRAGMA table_info(crew)")}
         assert dbm.get_setting("company_name") == "Chicago Sound and Backline"
-        assert dbm.query("SELECT title FROM events", one=True)["title"] == "Old gig"
+        event = dbm.query("SELECT title, event_type FROM events", one=True)
+        assert (event["title"], event["event_type"]) == ("Old gig", "Live Concert")
         visible = {r["text"]: r["crew_visible"] for r in dbm.query("SELECT text, crew_visible FROM event_checklist_items")}
         assert visible == {"Deposit received": 0, "Line check": 1}
+        # New default checklists and event types arrive; existing templates aren't duplicated.
+        names = [r["name"] for r in dbm.query("SELECT name FROM checklist_templates")]
+        assert names.count("Advance & Prep") == 1 and "Corporate & Speaking" in names
+        assert dbm.scalar("SELECT COUNT(*) FROM event_types") == len(dbm.DEFAULT_EVENT_TYPES)
+
+    # Deleting a default type sticks across restarts.
+    with app.app_context():
+        dbm.execute("DELETE FROM event_types WHERE name = 'Wedding'")
+    app = create_app({"TESTING": True, "DATABASE": path, "SECRET_KEY": "k"})
+    with app.app_context():
+        assert dbm.scalar("SELECT COUNT(*) FROM event_types WHERE name = 'Wedding'") == 0
 
 
 def test_office_only_checklist_items_stay_off_crew_worksheets(client, anon, app, make):

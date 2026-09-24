@@ -65,13 +65,14 @@
     <a class="pill no-print" href="{{ ics_url }}">Add to iCal</a>
   {% endcall %}
   {% if event.event_type %}{% call row('Event type', 'tag') %}{{ event.event_type }}{% endcall %}{% endif %}
+  {% if event.service_type %}{% call row('Service', 'speaker') %}{{ event.service_type }}{% endcall %}{% endif %}
   {% call row('Producer', 'user') %}
     {% if producer %}{{ producer.name }} {{ contact_buttons(producer.phone, producer.email) }}
     {% else %}{{ settings.company_name }} office {{ contact_buttons(settings.company_phone, settings.company_email) }}{% endif %}
   {% endcall %}
   {% if event.attire %}{% call row('Dress code', 'shirt') %}{{ event.attire }}{% endcall %}{% endif %}
-  {% if event.guest_count %}{% call row('Number of guests', 'users') %}{{ event.guest_count }}{% endcall %}{% endif %}
-  {% if event.honorees %}{% call row('Couple / honorees', 'heart') %}{{ event.honorees }}{% endcall %}{% endif %}
+  {% if event.guest_count %}{% call row('Audience / guests', 'users') %}{{ event.guest_count }}{% endcall %}{% endif %}
+  {% if event.honorees %}{% call row(labels.people, 'star') %}<div class="pre">{{ event.honorees }}</div>{% endcall %}{% endif %}
   {% if client %}{% call row('Client', 'user') %}{{ client.name }}{% if client.company %} · {{ client.company }}{% endif %}{% endcall %}{% endif %}
   {% if event.performers %}{% call row('Performers', 'users') %}{{ event.performers }}{% endcall %}{% endif %}
   {% if settings.crew_terms %}{% call row('Terms of use', 'scale') %}<div class="pre">{{ settings.crew_terms }}</div>{% endcall %}{% endif %}
@@ -90,7 +91,7 @@
 {# ------------------------------------------------------- LOCATION & VENUE #}
 {% call section('Location & venue', 'building') %}
 <div class="ws-rows">
-  {% for v, addr, label in [(venue2, venue2_address, event.venue2_label or 'Earlier location'), (venue, venue_address, event.venue_label or 'Venue')] if v %}
+  {% for v, addr, label in [(venue, venue_address, labels.venue), (venue2, venue2_address, labels.venue2)] if v %}
     {% call row(label, 'pin') %}
       <strong>{{ v.name }}</strong>
       {% if addr %}<div>{{ addr }}</div>{% endif %}
@@ -144,18 +145,19 @@
   {% call row('Event timings', 'clock') %}{% include "public/_timings.html" %}{% endcall %}
 </div>
 {% if event.run_of_show %}<div class="pre ws-run">{{ event.run_of_show }}</div>{% endif %}
-{% set logistics = [('Parking & load-in', event.parking), ('Venue load-in', venue.load_in_notes if venue), ('Venue parking', venue.parking_notes if venue), ('Power', event.power_notes), ('Venue power', venue.power_notes if venue), ('Stage', venue.stage_notes if venue)] %}
-{% if logistics|selectattr(1)|list %}
+{% if logistics %}
 <div class="ws-rows" style="margin-top:1rem">
-  {% for label, text in logistics if text %}{% call row(label, 'bolt' if 'ower' in label else 'pin') %}<div class="pre">{{ text }}</div>{% endcall %}{% endfor %}
+  {% for label, text, icon_name in logistics %}{% call row(label, icon_name) %}<div class="pre">{{ text }}</div>{% endcall %}{% endfor %}
 </div>
 {% endif %}
 {% endcall %}
 
 {# ------------------------------------------------------ AUDIO & BACKLINE #}
 {% call section('Audio & backline', 'speaker', 'gear') %}
-{% if event.audio_notes or event.backline_notes %}
+{% include "_specs.html" %}
+{% if event.playback_feeds or event.audio_notes or event.backline_notes %}
 <div class="ws-rows" style="margin-bottom:.8rem">
+  {% if event.playback_feeds %}{% call row('Playback & feeds', 'bolt') %}<div class="pre">{{ event.playback_feeds }}</div>{% endcall %}{% endif %}
   {% if event.audio_notes %}{% call row('Audio', 'speaker') %}<div class="pre">{{ event.audio_notes }}</div>{% endcall %}{% endif %}
   {% if event.backline_notes %}{% call row('Backline', 'speaker') %}<div class="pre">{{ event.backline_notes }}</div>{% endcall %}{% endif %}
 </div>
