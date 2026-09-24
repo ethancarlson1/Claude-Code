@@ -1,0 +1,19 @@
+{% extends "doc_base.html" %}
+{% from "_macros.html" import csrf %}
+{% block title %}Contract {{ contract.number }}{% endblock %}
+{% block document %}
+{% include "contracts/_document.html" %}
+{% if contract.status == 'sent' %}
+<section class="you no-print" style="margin-top:2rem" id="sign">
+  <h3 style="margin-top:0">Sign this agreement</h3>
+  {% if error %}<div class="flash flash-bad">{{ error }}</div>{% endif %}
+  <form method="post" action="{{ url_for('public.sign_contract', key=contract.public_key) }}">
+    {{ csrf() }}
+    <div class="field"><label for="signed_name">Type your full legal name</label>
+      <input id="signed_name" name="signed_name" required minlength="2" autocomplete="name" value="{{ request.form.get('signed_name', '') }}"></div>
+    <label class="check" style="margin:.6rem 0"><input type="checkbox" name="agree" value="1" required> I have read and agree to this agreement, and I'm authorized to sign it{% if client and client.company %} for {{ client.company }}{% endif %}.</label>
+    <button class="btn btn-primary" type="submit">Sign agreement</button>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

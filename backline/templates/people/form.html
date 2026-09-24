@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf, form_sections %}
+{% block title %}{{ ('Edit ' ~ row.name) if row else ('Add ' ~ spec.singular) }}{% endblock %}
+{% block heading %}<h1>{{ ('Edit ' ~ row.name) if row else ('Add ' ~ spec.singular) }}</h1>{% endblock %}
+{% block content %}
+<form method="post" novalidate>
+  {{ csrf() }}
+  {% if errors %}<div class="flash flash-bad">Please fix the highlighted fields.</div>{% endif %}
+  {{ form_sections(grouped, values, errors) }}
+  <div class="form-actions">
+    <button class="btn btn-primary" type="submit">{{ 'Save changes' if row else 'Add ' ~ spec.singular }}</button>
+    <a class="btn" href="{{ url_for('people.detail', kind=kind, row_id=row.id) if row else url_for('people.index', kind=kind) }}">Cancel</a>
+  </div>
+</form>
+{% endblock %}

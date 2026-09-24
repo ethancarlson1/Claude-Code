@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% from "_macros.html" import badge, empty %}
+{% block title %}Inventory{% endblock %}
+{% block heading %}<h1>Inventory</h1>{% endblock %}
+{% block actions %}
+  <a class="btn" href="{{ url_for('inventory.import_csv') }}">Import CSV</a>
+  <a class="btn" href="{{ url_for('inventory.export_csv') }}">Export CSV</a>
+  <a class="btn btn-primary" href="{{ url_for('inventory.new') }}">+ Add item</a>
+{% endblock %}
+{% block content %}
+<div class="stats">
+  <div class="stat"><div class="stat-label">Items</div><div class="stat-value">{{ summary['items'] }}</div><div class="stat-note">{{ summary.units }} units in service</div></div>
+  <div class="stat"><div class="stat-label">Replacement value</div><div class="stat-value">{{ summary.value|money }}</div><div class="stat-note">for insurance</div></div>
+  <a class="stat{{ ' alert' if summary.maintenance }}" href="{{ url_for('inventory.index', status='maintenance') }}"><div class="stat-label">In maintenance</div><div class="stat-value">{{ summary.maintenance or 0 }}</div><div class="stat-note">not bookable</div></a>
+</div>
+<form class="filters" method="get">
+  <input type="search" name="q" value="{{ q }}" placeholder="Search name, make, model, serial, tag">
+  <select name="category"><option value="">All categories</option>
+    {% for c in categories %}<option {% if c == category %}selected{% endif %}>{{ c }}</option>{% endfor %}</select>
+  <select name="status">
+    {% for v, l in [('current', 'Active + maintenance'), ('active', 'Active'), ('maintenance', 'Maintenance'), ('retired', 'Retired'), ('all', 'All')] %}
+      <option value="{{ v }}" {% if v == status %}selected{% endif %}>{{ l }}</option>
+    {% endfor %}</select>
+  <label class="small muted" for="avail-date">Availability on</label>
+  <input id="avail-date" type="date" name="date" value="{{ on_date }}" style="min-width:0">
+  <button class="btn" type="submit">Filter</button>
+</form>
+<div class="card">
+  {% if items %}
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Item</th><th>Make / model</th><th>Tag / serial</th><th class="num">Qty</th>
+      {% if booked is not none %}<th class="num">Booked {{ on_date|fdate('short') }}</th><th class="num">Free</th>{% endif %}
+      <th>Condition</th><th>Status</th><th class="num">Rate/day</th><th>Location</th></tr></thead>
+    <tbody>
+    {% set ns = namespace(cat=None) %}
+    {% for i in items %}
+      {% if i.category != ns.cat %}{% set ns.cat = i.category %}<tr class="group-row"><td colspan="{{ 10 if booked is not none else 8 }}">{{ i.category }}</td></tr>{% endif %}
+      <tr>
+        <td><a href="{{ url_for('inventory.detail', item_id=i.id) }}"><strong>{{ i.name }}</strong></a></td>
+        <td>{{ [i.make, i.model]|select|join(' ') or '—' }}</td>
+        <td class="small">{% if i.asset_tag %}#{{ i.asset_tag }}{% endif %}{% if i.serial_number %}<div class="muted mono">{{ i.serial_number }}</div>{% endif %}</td>
+        <td class="num">{{ i.quantity }}</td>
+        {% if booked is not none %}
+          {% set b = booked.get(i.id, 0) %}{% set free = (i.quantity - b) if i.status == 'active' else 0 %}
+          <td class="num">{{ b or '' }}</td>
+          <td class="num"><strong class="{{ 'error' if free <= 0 }}">{{ free if free > 0 else 0 }}</strong></td>
+        {% endif %}
+        <td>{{ i.condition }}</td>
+        <td>{{ badge(i.status) }}</td>
+        <td class="num">{{ i.rental_rate|money if i.rental_rate else '—' }}</td>
+        <td class="small">{{ i.location or '' }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+    {{ empty('No inventory items match.', url_for('inventory.new'), '+ Add item') }}
+  {% endif %}
+</div>
+{% endblock %}

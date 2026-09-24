@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% from "_macros.html" import badge, empty %}
+{% block title %}Invoices{% endblock %}
+{% block heading %}<h1>Invoices</h1>{% endblock %}
+{% block actions %}<a class="btn btn-primary" href="{{ url_for('invoices.new') }}">+ New invoice</a>{% endblock %}
+{% block content %}
+<div class="stats">
+  <a class="stat" href="{{ url_for('invoices.index') }}"><div class="stat-label">Outstanding</div><div class="stat-value">{{ outstanding|money }}</div><div class="stat-note">sent, unpaid balances</div></a>
+  <a class="stat{{ ' alert' if overdue > 0 }}" href="{{ url_for('invoices.index', status='overdue') }}"><div class="stat-label">Overdue</div><div class="stat-value">{{ overdue|money }}</div><div class="stat-note">past due date</div></a>
+  <div class="stat"><div class="stat-label">Collected this month</div><div class="stat-value">{{ collected|money }}</div></div>
+</div>
+<form class="filters" method="get">
+  <select name="status" onchange="this.form.submit()"><option value="">All statuses</option>
+    {% for s in statuses %}<option value="{{ s }}" {% if s == status %}selected{% endif %}>{{ s|title }}</option>{% endfor %}</select>
+</form>
+<div class="card">
+  {% if rows %}
+  <div class="table-wrap"><table>
+    <thead><tr><th>Number</th><th>Client</th><th>Event</th><th>Issued</th><th>Due</th><th>Status</th><th class="num">Total</th><th class="num">Balance</th></tr></thead>
+    <tbody>
+    {% for r in rows %}{% set i = r.row %}
+      <tr>
+        <td><a href="{{ url_for('invoices.detail', invoice_id=i.id) }}"><strong>{{ i.number }}</strong></a></td>
+        <td>{{ i.client_name or '—' }}</td>
+        <td>{{ i.event_title or '—' }}</td>
+        <td class="nowrap">{{ i.issue_date|fdate('short') }}</td>
+        <td class="nowrap">{{ i.due_date|fdate('short') if i.due_date else '—' }}</td>
+        <td>{{ badge(r.status) }}</td>
+        <td class="num">{{ r.totals.total|money }}</td>
+        <td class="num">{{ r.totals.balance|money if r.status not in ('void',) else '—' }}</td>
+      </tr>
+    {% endfor %}
+    </tbody></table></div>
+  {% else %}
+    {{ empty('No invoices here yet.', url_for('invoices.new'), '+ New invoice') }}
+  {% endif %}
+</div>
+{% endblock %}

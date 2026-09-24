@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% from "_macros.html" import badge, progress, empty %}
+{% block title %}Dashboard{% endblock %}
+{% block heading %}<h1>Dashboard</h1><div class="sub">{{ today()|fdate }}</div>{% endblock %}
+{% block actions %}
+  <a class="btn" href="{{ url_for('events.calendar') }}">Calendar</a>
+  <a class="btn btn-primary" href="{{ url_for('events.new') }}">+ New event</a>
+{% endblock %}
+{% block content %}
+<div class="stats">
+  <a class="stat" href="{{ url_for('events.index') }}"><div class="stat-label">Booked next 30 days</div><div class="stat-value">{{ events_30 }}</div><div class="stat-note">hold + confirmed events</div></a>
+  <a class="stat{{ ' alert' if shortages }}" href="#conflicts"><div class="stat-label">Gear conflicts</div><div class="stat-value">{{ shortages|length }}</div><div class="stat-note">events short on stock (90 days)</div></a>
+  <a class="stat" href="{{ url_for('contracts.index', status='sent') }}"><div class="stat-label">Awaiting signature</div><div class="stat-value">{{ unsigned|length }}</div><div class="stat-note">contracts sent</div></a>
+  <a class="stat" href="{{ url_for('invoices.index') }}"><div class="stat-label">Outstanding</div><div class="stat-value">{{ outstanding|money }}</div><div class="stat-note">unpaid invoice balances</div></a>
+  <a class="stat{{ ' alert' if overdue_total > 0 }}" href="{{ url_for('invoices.index', status='overdue') }}"><div class="stat-label">Overdue</div><div class="stat-value">{{ overdue_total|money }}</div><div class="stat-note">{{ overdue|length }} invoice{{ 's' if overdue|length != 1 }}</div></a>
+</div>
+
+<div class="split">
+  <section class="card">
+    <div class="card-head"><h2>Upcoming events</h2><a class="small" href="{{ url_for('events.index') }}">All events &rarr;</a></div>
+    {% if upcoming %}
+    <div class="table-wrap"><table>
+      <thead><tr><th>Date</th><th>Event</th><th>Status</th><th>Crew</th><th>Gear pulled</th><th>Checklist</th></tr></thead>
+      <tbody>
+      {% for e in upcoming %}
+        <tr>
+          <td class="nowrap">{{ e.event_date|fdate }}{% if e.load_in_time %}<div class="small muted">Load-in {{ e.load_in_time|ftime }}</div>{% endif %}</td>
+          <td><a href="{{ url_for('events.detail', event_id=e.id) }}"><strong>{{ e.title }}</strong></a>
+            <div class="small muted">{{ [e.client_name, e.venue_name]|select|join(' · ') }}</div></td>
+          <td>{{ badge(e.status) }}</td>
+          <td>{{ progress(e.crew_confirmed, e.crew_total) if e.crew_total else '—' }}</td>
+          <td>{{ progress(e.gear_pulled, e.gear_total) if e.gear_total else '—' }}</td>
+          <td>{{ progress(e.check_done, e.check_total) if e.check_total else '—' }}</td>
+        </tr>
+      {% endfor %}
+      </tbody></table></div>
+    {% else %}
+      {{ empty('Nothing on the books yet.', url_for('events.new'), '+ New event') }}
+    {% endif %}
+  </section>
+
+  <div>
+    <section class="card">
+      <h2>Needs attention (next 14 days)</h2>
+      {% if attention %}
+      <ul class="checklist">
+        {% for event_id, tab, message, when in attention %}
+          <li><span class="text"><a href="{{ url_for('events.detail', event_id=event_id, tab=tab) }}">{{ message }}</a></span><span class="meta">{{ when|fdate('short') }}</span></li>
+        {% endfor %}
+      </ul>
+      {% else %}<p class="muted">All clear.</p>{% endif %}
+    </section>
+
+    {% if shortages %}
+    <section class="card" id="conflicts">
+      <h2>Gear conflicts</h2>
+      <ul class="checklist">
+        {% for e, count in shortages %}
+          <li><span class="text"><a href="{{ url_for('events.detail', event_id=e.id, tab='gear') }}">{{ e.title }}</a> — {{ count }} item{{ 's' if count != 1 }} short</span><span class="meta">{{ e.event_date|fdate('short') }}</span></li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+
+    {% if not_returned %}
+    <section class="card">
+      <h2>Gear not checked back in</h2>
+      <ul class="checklist">
+        {% for e in not_returned %}
+          <li><span class="text"><a href="{{ url_for('events.detail', event_id=e.id, tab='gear') }}">{{ e.title }}</a> — {{ e['items'] }} item{{ 's' if e['items'] != 1 }}</span><span class="meta">{{ e.event_date|fdate('short') }}</span></li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+
+    {% if unsigned %}
+    <section class="card">
+      <h2>Contracts awaiting signature</h2>
+      <ul class="checklist">
+        {% for k in unsigned %}
+          <li><span class="text"><a href="{{ url_for('contracts.detail', contract_id=k.id) }}">{{ k.number }}</a> — {{ k.event_title }}</span><span class="meta">{{ k.event_date|fdate('short') }}</span></li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+
+    {% if overdue %}
+    <section class="card">
+      <h2>Overdue invoices</h2>
+      <ul class="checklist">
+        {% for inv, totals in overdue %}
+          <li><span class="text"><a href="{{ url_for('invoices.detail', invoice_id=inv.id) }}">{{ inv.number }}</a> — {{ inv.client_name or 'No client' }} · {{ totals.balance|money }}</span><span class="meta">due {{ inv.due_date|fdate('short') }}</span></li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+
+    {% if maintenance %}
+    <section class="card">
+      <h2>In maintenance</h2>
+      <ul class="checklist">
+        {% for i in maintenance %}<li><span class="text"><a href="{{ url_for('inventory.detail', item_id=i.id) }}">{{ i.name }}</a></span><span class="meta">{{ i.condition }}</span></li>{% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

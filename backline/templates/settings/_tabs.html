@@ -1,0 +1,5 @@
+<nav class="tabs">
+  <a href="{{ url_for('settings.index') }}" class="{{ 'active' if request.endpoint == 'settings.index' }}">Company &amp; billing</a>
+  <a href="{{ url_for('settings.checklists') }}" class="{{ 'active' if request.endpoint.startswith('settings.checklist') }}">Checklist templates</a>
+  <a href="{{ url_for('settings.users') }}" class="{{ 'active' if request.endpoint == 'settings.users' }}">Users</a>
+</nav>

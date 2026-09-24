@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf, badge, delete_button, copy_link, field %}
+{% block title %}Invoice {{ invoice.number }}{% endblock %}
+{% block heading %}<h1>Invoice {{ invoice.number }} {{ badge(status) }}</h1>
+  <div class="sub">{% if client %}{{ client.name }}{% endif %}{% if event %} · <a href="{{ url_for('events.detail', event_id=event.id, tab='documents') }}">{{ event.title }}</a>{% endif %}</div>{% endblock %}
+{% block actions %}
+  {% if invoice.status != 'void' %}<a class="btn" href="{{ url_for('invoices.edit', invoice_id=invoice.id) }}">Edit</a>{% endif %}
+  <button class="btn" type="button" data-print>Print / PDF</button>
+{% endblock %}
+{% block content %}
+<div class="split">
+  <div class="doc" style="margin:0">{% include "invoices/_document.html" %}</div>
+  <div class="no-print">
+    <section class="card">
+      <h2>Send</h2>
+      {% if invoice.status == 'draft' %}
+        <p class="small">Mark it sent to turn on the client link and start tracking the due date.</p>
+        <form method="post" action="{{ url_for('invoices.set_status', invoice_id=invoice.id) }}">{{ csrf() }}<input type="hidden" name="action" value="send"><button class="btn btn-primary" type="submit">Mark as sent</button></form>
+      {% elif invoice.status == 'sent' %}
+        {% set link = url_for('public.invoice', key=invoice.public_key, _external=True) %}
+        <p class="small">Client link:</p>
+        {{ copy_link(link) }}
+        {% if client and client.email %}
+        <p style="margin-top:.6rem"><a class="btn btn-small" href="{{ mailto(client.email, 'Invoice ' ~ invoice.number ~ ' from ' ~ settings.company_name, 'Hi ' ~ client.name ~ ',\n\nYour invoice ' ~ invoice.number ~ ' for ' ~ totals.balance|money ~ ' is ready:\n' ~ link ~ '\n\nThank you!\n' ~ settings.company_name) }}">Email to client</a></p>
+        {% endif %}
+        <form method="post" action="{{ url_for('invoices.set_status', invoice_id=invoice.id) }}">{{ csrf() }}<input type="hidden" name="action" value="unsend"><button class="link small" type="submit">Move back to draft</button></form>
+      {% else %}
+        <p class="muted">This invoice is void.</p>
+        <form method="post" action="{{ url_for('invoices.set_status', invoice_id=invoice.id) }}">{{ csrf() }}<input type="hidden" name="action" value="reopen"><button class="btn btn-small" type="submit">Reopen as draft</button></form>
+      {% endif %}
+    </section>
+    <section class="card">
+      <h2>Payments</h2>
+      {% if payments %}
+      <table><tbody>
+        {% for p in payments %}
+        <tr><td>{{ p.paid_on|fdate('short') }}<div class="small muted">{{ [p.method, p.reference]|select|join(' · ') }}</div></td><td class="num">{{ p.amount|money }}</td>
+          <td><form method="post" action="{{ url_for('invoices.delete_payment', invoice_id=invoice.id, payment_id=p.id) }}" data-confirm="Remove this payment?">{{ csrf() }}<button class="link danger small" type="submit" aria-label="Remove payment">✕</button></form></td></tr>
+        {% endfor %}
+      </tbody></table>
+      {% endif %}
+      <p><strong>Balance: {{ totals.balance|money }}</strong></p>
+      {% if invoice.status != 'void' %}
+      <form method="post" action="{{ url_for('invoices.add_payment', invoice_id=invoice.id) }}">
+        {{ csrf() }}
+        <div class="grid-form" style="grid-template-columns:1fr 1fr">{% for f in payment_fields %}{{ field(f, payment_defaults, {}) }}{% endfor %}</div>
+        <div class="form-actions"><button class="btn" type="submit">Record payment</button></div>
+      </form>
+      {% endif %}
+    </section>
+    <section class="card">
+      {% if invoice.status != 'void' %}
+      <form method="post" action="{{ url_for('invoices.set_status', invoice_id=invoice.id) }}" data-confirm="Void this invoice?" class="inline">{{ csrf() }}<input type="hidden" name="action" value="void"><button class="btn btn-small btn-danger" type="submit">Void</button></form>
+      {% endif %}
+      {% if invoice.status == 'draft' %}{{ delete_button(url_for('invoices.delete', invoice_id=invoice.id), 'invoice ' ~ invoice.number) }}{% endif %}
+    </section>
+  </div>
+</div>
+{% endblock %}

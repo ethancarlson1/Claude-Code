@@ -1,0 +1,162 @@
+from flask import Blueprint, abort, flash, g, redirect, render_template, request, url_for
+from werkzeug.security import check_password_hash, generate_password_hash
+
+from .. import db, forms, services
+from ..forms import Field
+
+bp = Blueprint("settings", __name__)
+
+COMPANY_FIELDS = [
+    Field("company_name", "Company name", required=True, section="Company"),
+    Field("company_phone", "Phone", type="tel", section="Company"),
+    Field("company_email", "Email", type="email", section="Company"),
+    Field("company_address", "Address", type="textarea", section="Company"),
+    Field("default_tax_rate", "Default tax rate (%)", type="number", section="Billing"),
+    Field("deposit_percent", "Default deposit (%)", type="number", section="Billing"),
+    Field("invoice_prefix", "Invoice number prefix", section="Billing", help="e.g. INV- gives INV-2026-0001"),
+    Field("contract_prefix", "Contract number prefix", section="Billing"),
+    Field("invoice_terms", "Default invoice terms", type="textarea", section="Billing"),
+]
+
+
+@bp.route("/settings", methods=["GET", "POST"])
+def index():
+    values, errors = db.get_settings(), {}
+    if request.method == "POST":
+        fields = COMPANY_FIELDS + [Field("contract_template", "Contract template", type="textarea", required=True)]
+        values, errors = forms.parse(fields, request.form)
+        for key in ("default_tax_rate", "deposit_percent"):
+            if values.get(key) is not None and not 0 <= values[key] <= 100:
+                errors[key] = "Enter a percentage between 0 and 100."
+        if not errors:
+            for key, value in values.items():
+                if isinstance(value, float):
+                    value = f"{value:g}"
+                db.set_setting(key, "" if value is None else value)
+            flash("Settings saved.", "ok")
+            return redirect(url_for("settings.index"))
+    return render_template("settings/index.html", values=values, errors=errors,
+                           grouped=forms.sections(COMPANY_FIELDS), merge_fields=services.MERGE_FIELDS)
+
+
+# --- Checklist templates -----------------------------------------------------
+
+def _items_to_text(items):
+    lines, section = [], None
+    for item in items:
+        if item["section"] != section:
+            section = item["section"]
+            if section:
+                lines.append(f"# {section}")
+        lines.append(item["text"])
+    return "\n".join(lines)
+
+
+def _text_to_items(text):
+    items, section = [], None
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        if line.startswith("#"):
+            section = line.lstrip("#").strip() or None
+            continue
+        items.append((section, line.lstrip("-*[] ").strip() or line))
+    return items
+
+
+@bp.route("/settings/checklists")
+def checklists():
+    templates = db.query(
+        """SELECT t.*, (SELECT COUNT(*) FROM checklist_template_items WHERE template_id = t.id) AS item_count
+           FROM checklist_templates t ORDER BY t.id"""
+    )
+    return render_template("settings/checklists.html", templates=templates)
+
+
+@bp.route("/settings/checklists/new", methods=["GET", "POST"])
+@bp.route("/settings/checklists/<int:template_id>", methods=["GET", "POST"])
+def checklist_form(template_id=None):
+    template = None
+    if template_id:
+        template = db.query("SELECT * FROM checklist_templates WHERE id = ?", (template_id,), one=True)
+        if template is None:
+            abort(404)
+    name = template["name"] if template else ""
+    description = (template["description"] or "") if template else ""
+    items_text = _items_to_text(db.query(
+        "SELECT section, text FROM checklist_template_items WHERE template_id = ? ORDER BY sort, id", (template_id,)
+    )) if template else ""
+    error = None
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        description = request.form.get("description", "").strip()
+        items_text = request.form.get("items", "")
+        items = _text_to_items(items_text)
+        if not name or not items:
+            error = "Give the template a name and at least one item."
+        else:
+            conn = db.get_db()
+            if template:
+                conn.execute("UPDATE checklist_templates SET name = ?, description = ? WHERE id = ?",
+                             (name, description, template_id))
+                conn.execute("DELETE FROM checklist_template_items WHERE template_id = ?", (template_id,))
+            else:
+                template_id = conn.execute("INSERT INTO checklist_templates (name, description) VALUES (?, ?)",
+                                           (name, description)).lastrowid
+            for sort, (section, text) in enumerate(items):
+                conn.execute(
+                    "INSERT INTO checklist_template_items (template_id, section, text, sort) VALUES (?, ?, ?, ?)",
+                    (template_id, section, text, sort),
+                )
+            conn.commit()
+            flash(f"Saved checklist template '{name}'.", "ok")
+            return redirect(url_for("settings.checklists"))
+    return render_template("settings/checklist_form.html", template=template, name=name,
+                           description=description, items_text=items_text, error=error)
+
+
+@bp.route("/settings/checklists/<int:template_id>/delete", methods=["POST"])
+def delete_checklist(template_id):
+    db.execute("DELETE FROM checklist_templates WHERE id = ?", (template_id,))
+    flash("Template deleted. Checklists already added to events are unchanged.", "ok")
+    return redirect(url_for("settings.checklists"))
+
+
+# --- Users -------------------------------------------------------------------
+
+@bp.route("/settings/users", methods=["GET", "POST"])
+def users():
+    if request.method == "POST":
+        action = request.form.get("action")
+        if action == "add":
+            username = request.form.get("username", "").strip()
+            password = request.form.get("password", "")
+            if not username or len(password) < 8:
+                flash("Choose a username and a password of at least 8 characters.", "bad")
+            elif db.scalar("SELECT 1 FROM users WHERE username = ?", (username,)):
+                flash("That username is taken.", "bad")
+            else:
+                db.insert("users", {"username": username, "password_hash": generate_password_hash(password)})
+                flash(f"Added user {username}.", "ok")
+        elif action == "password":
+            me = db.query("SELECT * FROM users WHERE id = ?", (g.user["id"],), one=True)
+            new = request.form.get("new_password", "")
+            if not check_password_hash(me["password_hash"], request.form.get("current_password", "")):
+                flash("Current password is incorrect.", "bad")
+            elif len(new) < 8:
+                flash("New password must be at least 8 characters.", "bad")
+            else:
+                db.update("users", me["id"], {"password_hash": generate_password_hash(new)})
+                flash("Password changed.", "ok")
+        elif action == "delete":
+            user_id = request.form.get("user_id", type=int)
+            if user_id == g.user["id"]:
+                flash("You can't delete your own account.", "bad")
+            else:
+                db.execute("DELETE FROM users WHERE id = ?", (user_id,))
+                flash("User removed.", "ok")
+        else:
+            abort(400)
+        return redirect(url_for("settings.users"))
+    return render_template("settings/users.html", users=db.query("SELECT id, username, created_at FROM users ORDER BY username"))

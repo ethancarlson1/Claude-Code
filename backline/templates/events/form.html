@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf, form_sections %}
+{% block title %}{{ 'Edit ' ~ event.title if event else 'New event' }}{% endblock %}
+{% block heading %}
+  <h1>{{ 'Edit event' if event else 'New event' }}</h1>
+  {% if event %}<div class="sub mono">{{ event.reference_number }}</div>{% endif %}
+{% endblock %}
+{% block content %}
+<form method="post" novalidate>
+  {{ csrf() }}
+  {% if errors %}<div class="flash flash-bad">Please fix the highlighted fields.</div>{% endif %}
+  {{ form_sections(grouped, values, errors) }}
+  {% if templates %}
+  <fieldset class="card">
+    <legend>Checklists</legend>
+    <p class="muted small">Start this event with these checklists. You can add or remove items later.</p>
+    {% for t in templates %}
+      <label class="check"><input type="checkbox" name="templates" value="{{ t.id }}" {% if t.id|string in selected_templates %}checked{% endif %}> {{ t.name }} <span class="muted small">— {{ t.description }}</span></label>
+    {% endfor %}
+  </fieldset>
+  {% endif %}
+  <p class="muted small">Need a new client or venue? <a href="{{ url_for('people.new', kind='clients') }}" target="_blank">Add client</a> · <a href="{{ url_for('people.new', kind='venues') }}" target="_blank">Add venue</a> (opens in a new tab; reload this page to pick it).</p>
+  <div class="form-actions">
+    <button class="btn btn-primary" type="submit">{{ 'Save changes' if event else 'Create event' }}</button>
+    <a class="btn" href="{{ url_for('events.detail', event_id=event.id) if event else url_for('events.index') }}">Cancel</a>
+  </div>
+</form>
+{% endblock %}

@@ -1,0 +1,53 @@
+<header class="doc-head">
+  <div>
+    <div class="muted small">INVOICE</div>
+    <h1>{{ invoice.number }}</h1>
+    <div>Issued {{ invoice.issue_date|fdate('short') }}{% if invoice.due_date %} · Due {{ invoice.due_date|fdate('short') }}{% endif %}</div>
+    {% if status in ('paid', 'void', 'overdue') %}<div style="margin-top:.5rem"><span class="stamp {{ {'paid': 'ok', 'void': 'bad', 'overdue': 'bad'}[status] }}">{{ status }}</span></div>{% endif %}
+  </div>
+  {% include "_doc_company.html" %}
+</header>
+
+<div class="cols">
+  <div>
+    <h2 style="margin-top:0">Bill to</h2>
+    {% if client %}
+      <strong>{{ client.name }}</strong>{% if client.company %}<div>{{ client.company }}</div>{% endif %}
+      {% if client.address %}<div class="pre">{{ client.address }}</div>{% endif %}
+      {% if client.email %}<div>{{ client.email }}</div>{% endif %}
+    {% else %}<span class="muted">—</span>{% endif %}
+  </div>
+  {% if event %}
+  <div>
+    <h2 style="margin-top:0">Event</h2>
+    <strong>{{ event.title }}</strong>
+    <div>{{ event.event_date|fdate }}{% if event.end_date %} – {{ event.end_date|fdate }}{% endif %}</div>
+    {% if venue %}<div>{{ venue.name }}</div>{% endif %}
+    <div class="muted small mono">Ref # {{ event.reference_number }}</div>
+  </div>
+  {% endif %}
+</div>
+
+<h2>Items</h2>
+<table>
+  <thead><tr><th>Description</th><th class="num">Qty</th><th class="num">Unit price</th><th class="num">Amount</th></tr></thead>
+  <tbody>
+  {% for it in items %}
+    <tr><td>{{ it.description }}{% if not it.taxable and invoice.tax_rate %} <span class="muted small">(non-taxable)</span>{% endif %}</td>
+      <td class="num">{{ '%g'|format(it.quantity) }}</td><td class="num">{{ it.unit_price|money }}</td><td class="num">{{ (it.quantity * it.unit_price)|money }}</td></tr>
+  {% else %}
+    <tr><td colspan="4" class="muted">No line items.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+<table class="totals" style="margin-top:.6rem">
+  <tr><td>Subtotal</td><td class="num">{{ totals.subtotal|money }}</td></tr>
+  {% if totals.discount %}<tr><td>Discount</td><td class="num">-{{ totals.discount|money }}</td></tr>{% endif %}
+  {% if invoice.tax_rate %}<tr><td>Tax ({{ '%g'|format(invoice.tax_rate) }}%)</td><td class="num">{{ totals.tax|money }}</td></tr>{% endif %}
+  <tr class="grand"><td>Total</td><td class="num">{{ totals.total|money }}</td></tr>
+  {% for p in payments %}<tr><td class="small">Paid {{ p.paid_on|fdate('short') }}{% if p.method %} · {{ p.method }}{% endif %}</td><td class="num">-{{ p.amount|money }}</td></tr>{% endfor %}
+  <tr class="grand"><td>Balance due</td><td class="num">{{ totals.balance|money }}</td></tr>
+</table>
+
+{% if invoice.notes %}<h2>Notes</h2><div class="pre">{{ invoice.notes }}</div>{% endif %}
+{% if invoice.terms %}<h2>Terms</h2><div class="pre small">{{ invoice.terms }}</div>{% endif %}

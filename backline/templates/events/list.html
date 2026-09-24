@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% from "_macros.html" import badge, progress, empty %}
+{% block title %}Events{% endblock %}
+{% block heading %}<h1>Events</h1>{% endblock %}
+{% block actions %}<a class="btn btn-primary" href="{{ url_for('events.new') }}">+ New event</a>{% endblock %}
+{% block content %}
+<form class="filters" method="get">
+  <input type="search" name="q" value="{{ q }}" placeholder="Search title, ref #, client, venue, artist">
+  <select name="when">
+    {% for v, l in [('upcoming', 'Upcoming'), ('past', 'Past'), ('all', 'All dates')] %}
+      <option value="{{ v }}" {% if when == v %}selected{% endif %}>{{ l }}</option>
+    {% endfor %}
+  </select>
+  <select name="status">
+    <option value="">Any status</option>
+    {% for s in statuses %}<option value="{{ s }}" {% if status == s %}selected{% endif %}>{{ s|title }}</option>{% endfor %}
+  </select>
+  <button class="btn" type="submit">Filter</button>
+</form>
+<div class="card">
+  {% if events %}
+  <div class="table-wrap">
+  <table>
+    <thead><tr>
+      <th>Date</th><th>Event</th><th>Client</th><th>Venue</th><th>Status</th>
+      <th>Crew</th><th>Gear pulled</th><th>Checklist</th>
+    </tr></thead>
+    <tbody>
+    {% for e in events %}
+      <tr>
+        <td class="nowrap">{{ e.event_date|fdate }}{% if e.end_date %}<div class="small muted">to {{ e.end_date|fdate('short') }}</div>{% endif %}
+          {% if e.start_time %}<div class="small muted">{{ e.start_time|ftime }}</div>{% endif %}</td>
+        <td><a href="{{ url_for('events.detail', event_id=e.id) }}"><strong>{{ e.title }}</strong></a>
+          <div class="small muted mono">{{ e.reference_number }}</div></td>
+        <td>{{ e.client_name or '—' }}</td>
+        <td>{{ e.venue_name or '—' }}{% if e.venue_city %}<div class="small muted">{{ e.venue_city }}</div>{% endif %}</td>
+        <td>{{ badge(e.status) }}</td>
+        <td>{{ progress(e.crew_confirmed, e.crew_total, 'confirmed') if e.crew_total else '—' }}</td>
+        <td>{{ progress(e.gear_pulled, e.gear_total, 'pulled') if e.gear_total else '—' }}</td>
+        <td>{{ progress(e.check_done, e.check_total, 'done') if e.check_total else '—' }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+    {{ empty('No events match.', url_for('events.new'), '+ New event') }}
+  {% endif %}
+</div>
+{% endblock %}

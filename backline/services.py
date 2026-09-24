@@ -1,0 +1,337 @@
+"""Business logic shared across views: gear availability, gear totals,
+invoice math and contract rendering."""
+
+import re
+from decimal import Decimal
+
+from . import db, util
+
+
+# --- Gear availability -------------------------------------------------------
+
+def booked_quantities(start, end, exclude_event_id=None):
+    """Units of each inventory item reserved by hold/confirmed events that
+    overlap [start, end]. Returns {item_id: qty}."""
+    placeholders = ", ".join("?" for _ in util.RESERVING_STATUSES)
+    rows = db.query(
+        f"""
+        SELECT g.item_id, SUM(g.quantity) AS qty
+        FROM event_gear g JOIN events e ON e.id = g.event_id
+        WHERE g.item_id IS NOT NULL
+          AND e.status IN ({placeholders})
+          AND e.event_date <= ?
+          AND COALESCE(e.end_date, e.event_date) >= ?
+          AND e.id != ?
+        GROUP BY g.item_id
+        """,
+        (*util.RESERVING_STATUSES, end, start, exclude_event_id or -1),
+    )
+    return {r["item_id"]: r["qty"] for r in rows}
+
+
+def item_bookings(item_id, start, end, exclude_event_id=None):
+    """The reserving events that use an item in a date window."""
+    placeholders = ", ".join("?" for _ in util.RESERVING_STATUSES)
+    return db.query(
+        f"""
+        SELECT e.id, e.reference_number, e.title, e.event_date, e.end_date, e.status,
+               SUM(g.quantity) AS qty
+        FROM event_gear g JOIN events e ON e.id = g.event_id
+        WHERE g.item_id = ?
+          AND e.status IN ({placeholders})
+          AND e.event_date <= ?
+          AND COALESCE(e.end_date, e.event_date) >= ?
+          AND e.id != ?
+        GROUP BY e.id
+        ORDER BY e.event_date
+        """,
+        (item_id, *util.RESERVING_STATUSES, end, start, exclude_event_id or -1),
+    )
+
+
+def gear_availability(event):
+    """For each inventory item on an event's gear list, how many units are
+    free once overlapping events are accounted for.
+
+    Returns {item_id: {"requested", "owned", "booked_elsewhere", "available",
+    "short", "conflicts"}}.
+    """
+    start, end = event["event_date"], util.event_end(event)
+    rows = db.query(
+        """
+        SELECT g.item_id, SUM(g.quantity) AS requested, i.quantity AS owned, i.status
+        FROM event_gear g JOIN inventory_items i ON i.id = g.item_id
+        WHERE g.event_id = ?
+        GROUP BY g.item_id
+        """,
+        (event["id"],),
+    )
+    if not rows:
+        return {}
+    booked = booked_quantities(start, end, exclude_event_id=event["id"])
+    result = {}
+    for r in rows:
+        owned = r["owned"] if r["status"] == "active" else 0
+        elsewhere = booked.get(r["item_id"], 0)
+        available = max(owned - elsewhere, 0)
+        short = max(r["requested"] - available, 0)
+        result[r["item_id"]] = {
+            "requested": r["requested"],
+            "owned": r["owned"],
+            "item_status": r["status"],
+            "booked_elsewhere": elsewhere,
+            "available": available,
+            "short": short,
+            "conflicts": item_bookings(r["item_id"], start, end, event["id"]) if short else [],
+        }
+    return result
+
+
+def shortage_count(event):
+    return sum(1 for a in gear_availability(event).values() if a["short"])
+
+
+def upcoming_shortages(start, end):
+    """Reserving events in a window that have at least one short item."""
+    placeholders = ", ".join("?" for _ in util.RESERVING_STATUSES)
+    events = db.query(
+        f"""
+        SELECT * FROM events
+        WHERE status IN ({placeholders})
+          AND COALESCE(end_date, event_date) >= ? AND event_date <= ?
+        ORDER BY event_date
+        """,
+        (*util.RESERVING_STATUSES, start, end),
+    )
+    out = []
+    for e in events:
+        count = shortage_count(e)
+        if count:
+            out.append((e, count))
+    return out
+
+
+# --- Gear list ---------------------------------------------------------------
+
+def event_gear(event_id):
+    return db.query(
+        """
+        SELECT g.*, i.name AS item_name, i.category AS item_category, i.make, i.model,
+               i.asset_tag, i.location
+        FROM event_gear g LEFT JOIN inventory_items i ON i.id = g.item_id
+        WHERE g.event_id = ?
+        ORDER BY COALESCE(g.category, i.category, 'Other'), g.sort, g.id
+        """,
+        (event_id,),
+    )
+
+
+def gear_label(row):
+    if row["item_id"] and row["item_name"]:
+        return row["item_name"]
+    return row["description"] or "(unnamed)"
+
+
+def gear_category(row):
+    return row["category"] or row["item_category"] or "Other"
+
+
+def gear_total(event):
+    days = util.event_days(event)
+    total = Decimal("0")
+    for g in event_gear(event["id"]):
+        total += util.to_decimal(g["rate"]) * g["quantity"] * days
+    return util.round_money(total)
+
+
+def gear_progress(event_id):
+    row = db.query(
+        "SELECT COUNT(*) AS total, SUM(pulled) AS pulled, SUM(loaded) AS loaded, "
+        "SUM(returned) AS returned FROM event_gear WHERE event_id = ?",
+        (event_id,),
+        one=True,
+    )
+    return {k: row[k] or 0 for k in ("total", "pulled", "loaded", "returned")}
+
+
+def checklist_progress(event_id):
+    row = db.query(
+        "SELECT COUNT(*) AS total, SUM(done) AS done FROM event_checklist_items WHERE event_id = ?",
+        (event_id,),
+        one=True,
+    )
+    return {"total": row["total"] or 0, "done": row["done"] or 0}
+
+
+def apply_checklist_template(event_id, template_id):
+    start = db.scalar(
+        "SELECT COALESCE(MAX(sort), -1) + 1 FROM event_checklist_items WHERE event_id = ?",
+        (event_id,),
+    )
+    items = db.query(
+        "SELECT section, text FROM checklist_template_items WHERE template_id = ? ORDER BY sort, id",
+        (template_id,),
+    )
+    conn = db.get_db()
+    for offset, item in enumerate(items):
+        conn.execute(
+            "INSERT INTO event_checklist_items (event_id, section, text, sort) VALUES (?, ?, ?, ?)",
+            (event_id, item["section"], item["text"], start + offset),
+        )
+    conn.commit()
+    return len(items)
+
+
+# --- Invoices ----------------------------------------------------------------
+
+def invoice_totals(invoice, items=None, payments=None):
+    if items is None:
+        items = db.query("SELECT * FROM invoice_items WHERE invoice_id = ?", (invoice["id"],))
+    if payments is None:
+        payments = db.query("SELECT amount FROM payments WHERE invoice_id = ?", (invoice["id"],))
+    subtotal = Decimal("0")
+    taxable = Decimal("0")
+    for it in items:
+        line = util.round_money(util.to_decimal(it["quantity"]) * util.to_decimal(it["unit_price"]))
+        subtotal += line
+        if it["taxable"]:
+            taxable += line
+    discount = min(util.round_money(invoice["discount"]), subtotal)
+    # Discount is applied before tax, spread proportionally over taxable lines.
+    if subtotal > 0 and taxable > 0:
+        taxable -= discount * taxable / subtotal
+    tax = util.round_money(taxable * util.to_decimal(invoice["tax_rate"]) / 100)
+    total = util.round_money(subtotal - discount + tax)
+    paid = util.round_money(sum((util.to_decimal(p["amount"]) for p in payments), Decimal("0")))
+    return {
+        "subtotal": util.round_money(subtotal),
+        "discount": discount,
+        "tax": tax,
+        "total": total,
+        "paid": paid,
+        "balance": util.round_money(total - paid),
+    }
+
+
+def invoice_status(invoice, totals=None):
+    """Effective status: draft, sent, partial, paid, overdue or void."""
+    if invoice["status"] in ("draft", "void"):
+        return invoice["status"]
+    totals = totals or invoice_totals(invoice)
+    if totals["balance"] <= 0:
+        return "paid"
+    if invoice["due_date"] and util.parse_date(invoice["due_date"]) < util.today():
+        return "overdue"
+    if totals["paid"] > 0:
+        return "partial"
+    return "sent"
+
+
+def next_number(table, prefix):
+    year = util.today().year
+    base = f"{prefix}{year}-"
+    last = db.scalar(
+        f"SELECT number FROM {table} WHERE number LIKE ? ORDER BY number DESC LIMIT 1",
+        (base + "%",),
+    )
+    seq = 1
+    if last:
+        tail = last[len(base):]
+        seq = int(tail) + 1 if tail.isdigit() else db.scalar(f"SELECT COUNT(*) FROM {table}") + 1
+    return f"{base}{seq:04d}"
+
+
+def invoice_lines_for_event(event):
+    """Pre-filled invoice lines from an event's gear list."""
+    days = util.event_days(event)
+    lines = []
+    for g in event_gear(event["id"]):
+        rate = util.to_decimal(g["rate"])
+        if rate <= 0:
+            continue
+        desc = gear_label(g)
+        if days > 1:
+            desc += f" ({days} days @ {util.money(rate)}/day)"
+        lines.append(
+            {
+                "description": desc,
+                "quantity": g["quantity"],
+                "unit_price": float(util.round_money(rate * days)),
+                "taxable": 1,
+            }
+        )
+    return lines
+
+
+# --- Contracts ---------------------------------------------------------------
+
+MERGE_FIELD = re.compile(r"\{\{\s*([a-z_]+)\s*\}\}")
+
+MERGE_FIELDS = [
+    ("company_name", "Your company name"),
+    ("contract_number", "Contract number"),
+    ("reference_number", "Event reference number"),
+    ("client_name", "Client name"),
+    ("client_company", "Client company"),
+    ("event_title", "Event title"),
+    ("event_date", "Event date (and end date for multi-day)"),
+    ("venue_name", "Venue name"),
+    ("venue_address", "Venue address"),
+    ("load_in_time", "Load-in time"),
+    ("soundcheck_time", "Soundcheck time"),
+    ("start_time", "Show start"),
+    ("end_time", "Show end"),
+    ("load_out_time", "Load-out time"),
+    ("gear_list", "Equipment list with quantities"),
+    ("total", "Contract total"),
+    ("deposit", "Deposit amount"),
+    ("deposit_due_date", "Deposit due date"),
+    ("balance", "Balance after deposit"),
+    ("balance_due_date", "Balance due date"),
+]
+
+
+def event_context(event):
+    client = db.query("SELECT * FROM clients WHERE id = ?", (event["client_id"],), one=True)
+    venue = db.query("SELECT * FROM venues WHERE id = ?", (event["venue_id"],), one=True)
+    return client, venue
+
+
+def venue_address(venue):
+    if not venue:
+        return ""
+    city_line = " ".join(p for p in [venue["city"] and venue["city"] + ",", venue["state"], venue["postal_code"]] if p)
+    return ", ".join(p for p in [venue["address"], city_line] if p)
+
+
+def render_contract(template, event, number, total, deposit, deposit_due, balance_due):
+    client, venue = event_context(event)
+    gear_lines = []
+    for g in event_gear(event["id"]):
+        gear_lines.append(f"  - {g['quantity']} x {gear_label(g)}")
+    date_text = util.fdate(event["event_date"])
+    if event["end_date"] and event["end_date"] != event["event_date"]:
+        date_text += f" through {util.fdate(event['end_date'])}"
+    values = {
+        "company_name": db.get_setting("company_name"),
+        "contract_number": number,
+        "reference_number": event["reference_number"],
+        "client_name": client["name"] if client else "",
+        "client_company": (client["company"] or "") if client else "",
+        "event_title": event["title"],
+        "event_date": date_text,
+        "venue_name": venue["name"] if venue else "TBD",
+        "venue_address": venue_address(venue),
+        "load_in_time": util.ftime(event["load_in_time"]) or "TBD",
+        "soundcheck_time": util.ftime(event["soundcheck_time"]) or "TBD",
+        "start_time": util.ftime(event["start_time"]) or "TBD",
+        "end_time": util.ftime(event["end_time"]) or "TBD",
+        "load_out_time": util.ftime(event["load_out_time"]) or "TBD",
+        "gear_list": "\n".join(gear_lines) or "  (equipment list to be attached)",
+        "total": util.money(total),
+        "deposit": util.money(deposit),
+        "deposit_due_date": util.fdate(deposit_due) or "signing",
+        "balance": util.money(util.to_decimal(total) - util.to_decimal(deposit)),
+        "balance_due_date": util.fdate(balance_due) or "the event date",
+    }
+    return MERGE_FIELD.sub(lambda m: str(values.get(m.group(1), m.group(0))), template)

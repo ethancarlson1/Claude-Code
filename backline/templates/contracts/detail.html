@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf, badge, delete_button, copy_link %}
+{% block title %}Contract {{ contract.number }}{% endblock %}
+{% block heading %}<h1>Contract {{ contract.number }} {{ badge(contract.status) }}</h1>
+  <div class="sub"><a href="{{ url_for('events.detail', event_id=event.id, tab='documents') }}">{{ event.title }}</a> · {{ event.event_date|fdate }}</div>{% endblock %}
+{% block actions %}
+  {% if contract.status in ('draft', 'sent') %}<a class="btn" href="{{ url_for('contracts.edit', contract_id=contract.id) }}">Edit</a>{% endif %}
+  <button class="btn" type="button" data-print>Print / PDF</button>
+{% endblock %}
+{% block content %}
+<div class="split">
+  <div class="doc" style="margin:0">{% include "contracts/_document.html" %}</div>
+  <div class="no-print">
+    <section class="card">
+      <h2>Send &amp; sign</h2>
+      {% if contract.status == 'draft' %}
+        <p class="small">Review the text, then mark it sent to turn on the client's signing link.</p>
+        <form method="post" action="{{ url_for('contracts.set_status', contract_id=contract.id) }}" class="inline">{{ csrf() }}<input type="hidden" name="action" value="send"><button class="btn btn-primary" type="submit">Mark as sent</button></form>
+        <form method="post" action="{{ url_for('contracts.regenerate', contract_id=contract.id) }}" class="inline" data-confirm="Replace the contract text with a fresh copy from the template? Manual edits will be lost.">{{ csrf() }}<button class="btn" type="submit">Rebuild from template</button></form>
+      {% else %}
+        {% set link = url_for('public.contract', key=contract.public_key, _external=True) %}
+        <p class="small">Client link{% if contract.status == 'sent' %} (they can review and sign here){% endif %}:</p>
+        {{ copy_link(link) }}
+        {% if client and client.email and contract.status == 'sent' %}
+          <p style="margin-top:.6rem"><a class="btn btn-small" href="{{ mailto(client.email, 'Contract for ' ~ event.title ~ ' — ' ~ event.event_date|fdate, 'Hi ' ~ client.name ~ ',\n\nPlease review and sign the agreement for ' ~ event.title ~ ' here:\n' ~ link ~ '\n\nThank you!\n' ~ settings.company_name) }}">Email to client</a></p>
+        {% endif %}
+        {% if contract.sent_at %}<p class="help">Sent {{ contract.sent_at|fdatetime }}</p>{% endif %}
+        {% if contract.status == 'signed' %}<p><strong>Signed by {{ contract.signed_name }}</strong><br><span class="small muted">{{ contract.signed_at|fdatetime }}</span></p>{% endif %}
+        {% if contract.status == 'sent' %}
+          <form method="post" action="{{ url_for('contracts.set_status', contract_id=contract.id) }}">{{ csrf() }}<input type="hidden" name="action" value="unsend"><button class="link small" type="submit">Move back to draft</button></form>
+        {% endif %}
+      {% endif %}
+    </section>
+    <section class="card">
+      <h2>Next steps</h2>
+      <p><a class="btn btn-small" href="{{ url_for('invoices.new', event_id=event.id) }}">+ Deposit / final invoice</a></p>
+      {% if contract.status != 'void' %}
+      <form method="post" action="{{ url_for('contracts.set_status', contract_id=contract.id) }}" data-confirm="Void this contract?">{{ csrf() }}<input type="hidden" name="action" value="void"><button class="btn btn-danger btn-small" type="submit">Void contract</button></form>
+      {% endif %}
+      {% if contract.status != 'signed' %}<div style="margin-top:.6rem">{{ delete_button(url_for('contracts.delete', contract_id=contract.id), 'contract ' ~ contract.number) }}</div>{% endif %}
+    </section>
+  </div>
+</div>
+{% endblock %}

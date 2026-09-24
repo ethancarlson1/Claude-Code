@@ -1,0 +1,75 @@
+{% macro csrf() %}<input type="hidden" name="_csrf" value="{{ csrf_token() }}">{% endmacro %}
+
+{% macro badge(status, label=None) -%}
+  <span class="badge badge-{{ status|status_class }}">{{ label or status|replace('_', ' ') }}</span>
+{%- endmacro %}
+
+{% macro progress(done, total, label='') -%}
+  {% set pct = (100 * done / total)|round|int if total else 0 %}
+  <span class="progress" title="{{ done }} of {{ total }} {{ label }}">
+    <span class="progress-bar{% if total and done == total %} complete{% endif %}"><span style="width: {{ pct }}%"></span></span>
+    <span class="progress-text">{{ done }}/{{ total }}</span>
+  </span>
+{%- endmacro %}
+
+{% macro field(f, values, errors) %}
+  {% set value = values.get(f.name) if values.get(f.name) is not none else (f.default if f.default is not none else '') %}
+  <div class="field{% if f.wide %} wide{% endif %}{% if errors.get(f.name) %} has-error{% endif %}">
+    {% if f.type == 'checkbox' %}
+      <label class="check">
+        <input type="checkbox" name="{{ f.name }}" value="1" {% if value %}checked{% endif %}>
+        {{ f.label }}
+      </label>
+    {% else %}
+      <label for="f-{{ f.name }}">{{ f.label }}{% if f.required %} <span class="req">*</span>{% endif %}</label>
+      {% if f.type == 'textarea' %}
+        <textarea id="f-{{ f.name }}" name="{{ f.name }}" rows="3" placeholder="{{ f.placeholder or '' }}">{{ value }}</textarea>
+      {% elif f.type in ('select', 'fk') %}
+        <select id="f-{{ f.name }}" name="{{ f.name }}" {% if f.required %}required{% endif %}>
+          {% if not f.required %}<option value="">—</option>{% endif %}
+          {% for v, l in f.options() %}
+            <option value="{{ v }}" {% if value|string == v|string %}selected{% endif %}>{{ l }}</option>
+          {% endfor %}
+        </select>
+      {% else %}
+        {% set input_type = {'money': 'number', 'number': 'number', 'int': 'number'}.get(f.type, f.type) %}
+        <input id="f-{{ f.name }}" name="{{ f.name }}" type="{{ input_type }}"
+          {% if f.type == 'money' %}step="0.01" min="0"{% elif f.type == 'number' %}step="any"{% elif f.type == 'int' %}step="1" min="0"{% endif %}
+          value="{{ value }}" placeholder="{{ f.placeholder or '' }}" {% if f.required %}required{% endif %}>
+      {% endif %}
+    {% endif %}
+    {% if errors.get(f.name) %}<div class="error">{{ errors[f.name] }}</div>{% elif f.help %}<div class="help">{{ f.help }}</div>{% endif %}
+  </div>
+{% endmacro %}
+
+{% macro form_sections(grouped, values, errors) %}
+  {% for section, fields in grouped %}
+    <fieldset class="card">
+      {% if section %}<legend>{{ section }}</legend>{% endif %}
+      <div class="grid-form">
+        {% for f in fields %}{{ field(f, values, errors) }}{% endfor %}
+      </div>
+    </fieldset>
+  {% endfor %}
+{% endmacro %}
+
+{% macro delete_button(action, what='this', label='Delete') %}
+  <form method="post" action="{{ action }}" class="inline" data-confirm="Delete {{ what }}? This can't be undone.">
+    {{ csrf() }}
+    <button type="submit" class="btn btn-danger">{{ label }}</button>
+  </form>
+{% endmacro %}
+
+{% macro empty(message, action_url=None, action_label=None) %}
+  <div class="empty">
+    <p>{{ message }}</p>
+    {% if action_url %}<a class="btn btn-primary" href="{{ action_url }}">{{ action_label }}</a>{% endif %}
+  </div>
+{% endmacro %}
+
+{% macro copy_link(url, label='Copy link') %}
+  <span class="copy-link">
+    <input type="text" readonly value="{{ url }}" aria-label="Link">
+    <button type="button" class="btn btn-small" data-copy="{{ url }}">{{ label }}</button>
+  </span>
+{% endmacro %}

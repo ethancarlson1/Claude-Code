@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Calendar{% endblock %}
+{% block heading %}<h1>{{ first.strftime('%B %Y') }}</h1>{% endblock %}
+{% block actions %}
+  <a class="btn" href="{{ url_for('events.calendar', month=prev_month) }}" aria-label="Previous month">&larr;</a>
+  <a class="btn" href="{{ url_for('events.calendar') }}">Today</a>
+  <a class="btn" href="{{ url_for('events.calendar', month=next_month) }}" aria-label="Next month">&rarr;</a>
+  <a class="btn btn-primary" href="{{ url_for('events.new') }}">+ New event</a>
+{% endblock %}
+{% block content %}
+<div class="calendar">
+  {% for dow in ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] %}<div class="dow">{{ dow }}</div>{% endfor %}
+  {% set t = today() %}
+  {% for d in days %}
+    <div class="day{% if d.month != first.month %} other{% endif %}{% if d == t %} today{% endif %}">
+      <a class="num" href="{{ url_for('events.new', date=d.isoformat()) }}" title="New event on this day">{{ d.day }}</a>
+      {% for e in by_day.get(d, []) %}
+        <a class="cal-event s-{{ e.status }}" href="{{ url_for('events.detail', event_id=e.id) }}" title="{{ e.title }}{% if e.venue_name %} @ {{ e.venue_name }}{% endif %} ({{ e.status }})">
+          {% if e.start_time and e.event_date == d.isoformat() %}{{ e.start_time|ftime }} {% endif %}{{ e.title }}
+        </a>
+      {% endfor %}
+    </div>
+  {% endfor %}
+</div>
+<p class="small muted" style="margin-top:.8rem">
+  <span class="badge badge-ok">confirmed</span> <span class="badge badge-warn">hold</span>
+  <span class="badge badge-muted">inquiry</span> <span class="badge badge-info">completed</span>
+  · Click a day number to create an event on that date.
+</p>
+{% endblock %}

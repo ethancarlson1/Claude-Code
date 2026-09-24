@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% from "_macros.html" import badge, empty %}
+{% block title %}Contracts{% endblock %}
+{% block heading %}<h1>Contracts</h1>{% endblock %}
+{% block actions %}<a class="btn btn-primary" href="{{ url_for('contracts.new') }}">+ New contract</a>{% endblock %}
+{% block content %}
+<form class="filters" method="get">
+  <select name="status" onchange="this.form.submit()"><option value="">All statuses</option>
+    {% for s in statuses %}<option value="{{ s }}" {% if s == status %}selected{% endif %}>{{ s|title }}</option>{% endfor %}</select>
+</form>
+<div class="card">
+  {% if rows %}
+  <div class="table-wrap"><table>
+    <thead><tr><th>Number</th><th>Event</th><th>Client</th><th>Status</th><th class="num">Total</th><th>Signed</th></tr></thead>
+    <tbody>
+    {% for k in rows %}
+      <tr>
+        <td><a href="{{ url_for('contracts.detail', contract_id=k.id) }}"><strong>{{ k.number }}</strong></a></td>
+        <td>{{ k.event_title }}<div class="small muted">{{ k.event_date|fdate }}</div></td>
+        <td>{{ k.client_name or '—' }}</td>
+        <td>{{ badge(k.status) }}</td>
+        <td class="num">{{ k.total_amount|money }}</td>
+        <td class="small">{% if k.signed_at %}{{ k.signed_name }}<div class="muted">{{ k.signed_at|fdatetime }}</div>{% elif k.sent_at %}<span class="muted">Sent {{ k.sent_at|fdatetime }}</span>{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody></table></div>
+  {% else %}
+    {{ empty('No contracts yet. Create one from an event to pre-fill it with the event details and gear list.', url_for('contracts.new'), '+ New contract') }}
+  {% endif %}
+</div>
+{% endblock %}

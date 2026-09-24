@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}New contract{% endblock %}
+{% block heading %}<h1>New contract</h1>{% endblock %}
+{% block content %}
+<section class="card" style="max-width:640px">
+  <h2>Which event is this contract for?</h2>
+  {% if events %}
+  <form method="get" action="{{ url_for('contracts.new') }}" class="form-row">
+    <div class="field grow"><select name="event_id" aria-label="Event">{% for e in events %}<option value="{{ e.id }}">{{ e.event_date|fdate('short') }} — {{ e.title }}</option>{% endfor %}</select></div>
+    <button class="btn btn-primary" type="submit">Continue</button>
+  </form>
+  {% else %}<p class="muted">Create an <a href="{{ url_for('events.new') }}">event</a> first.</p>{% endif %}
+</section>
+{% endblock %}

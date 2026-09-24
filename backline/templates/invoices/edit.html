@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf, field %}
+{% block title %}Edit {{ invoice.number }}{% endblock %}
+{% block heading %}<h1>Edit invoice {{ invoice.number }}</h1>{% endblock %}
+{% macro line_row(it) %}
+  <tr>
+    <td><input class="desc" name="item_description" value="{{ it.description if it else '' }}" aria-label="Description" placeholder="Description"></td>
+    <td class="num"><input name="item_quantity" type="number" step="any" value="{{ '%g'|format(it.quantity) if it else 1 }}" style="width:80px" aria-label="Quantity"></td>
+    <td class="num"><input name="item_price" type="number" step="0.01" value="{{ '%.2f'|format(it.unit_price) if it else '' }}" style="width:110px" aria-label="Unit price"></td>
+    <td class="check-col"><input type="checkbox" name="item_taxable_flag" {% if not it or it.taxable %}checked{% endif %} aria-label="Taxable">
+      <input type="hidden" name="item_taxable" value="{{ 0 if it and not it.taxable else 1 }}"></td>
+    <td class="num line-total">$0.00</td>
+    <td><button type="button" class="btn btn-small btn-danger" data-remove-line aria-label="Remove line">✕</button></td>
+  </tr>
+{% endmacro %}
+{% block content %}
+<form method="post" novalidate>
+  {{ csrf() }}
+  {% if errors or line_errors %}<div class="flash flash-bad">Please fix: {{ (errors.values()|list + line_errors)|join(' ') }}</div>{% endif %}
+  <fieldset class="card">
+    <legend>Line items</legend>
+    <div class="table-wrap">
+    <table class="lines" data-lines>
+      <thead><tr><th>Description</th><th class="num">Qty</th><th class="num">Unit price</th><th class="check-col">Tax</th><th class="num">Amount</th><th></th></tr></thead>
+      <tbody>
+        {% for it in items %}{{ line_row(it) }}{% else %}{{ line_row(none) }}{% endfor %}
+      </tbody>
+    </table>
+    </div>
+    <template id="line-template">{{ line_row(none) }}</template>
+    <div class="form-row" style="margin-top:.8rem;justify-content:space-between;align-items:flex-start">
+      <button type="button" class="btn" data-add-line>+ Add line</button>
+      <table class="totals">
+        <tr><td>Subtotal</td><td class="num" data-total="subtotal"></td></tr>
+        <tr><td>Discount</td><td class="num" data-total="discount"></td></tr>
+        <tr><td>Tax</td><td class="num" data-total="tax"></td></tr>
+        <tr class="grand"><td>Total</td><td class="num" data-total="total"></td></tr>
+      </table>
+    </div>
+  </fieldset>
+  <fieldset class="card">
+    <legend>Details</legend>
+    <div class="grid-form">{% for f in fields %}{{ field(f, values, errors) }}{% endfor %}</div>
+  </fieldset>
+  <div class="form-actions">
+    <button class="btn btn-primary" type="submit">Save invoice</button>
+    <a class="btn" href="{{ url_for('invoices.detail', invoice_id=invoice.id) }}">Cancel</a>
+  </div>
+</form>
+{% endblock %}

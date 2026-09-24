@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf, field %}
+{% block title %}New invoice{% endblock %}
+{% block heading %}<h1>New invoice</h1>{% if event %}<div class="sub">{{ event.title }} · {{ event.event_date|fdate }}</div>{% endif %}{% endblock %}
+{% block content %}
+<form method="post" novalidate>
+  {{ csrf() }}
+  {% if errors %}<div class="flash flash-bad">Please fix the highlighted fields.</div>{% endif %}
+  <fieldset class="card">
+    <div class="grid-form">{% for f in fields %}{{ field(f, values, errors) }}{% endfor %}</div>
+    <label class="check" style="margin-top:.8rem"><input type="checkbox" name="prefill" value="1" checked> Pre-fill line items from the event's priced gear list</label>
+  </fieldset>
+  <div class="form-actions">
+    <button class="btn btn-primary" type="submit">Create draft</button>
+    <a class="btn" href="{{ url_for('events.detail', event_id=event.id, tab='documents') if event else url_for('invoices.index') }}">Cancel</a>
+  </div>
+</form>
+{% endblock %}

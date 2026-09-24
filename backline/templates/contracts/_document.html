@@ -1,0 +1,32 @@
+<header class="doc-head">
+  <div>
+    <div class="muted small">CONTRACT {{ contract.number }}</div>
+    <h1>{{ contract.title }}</h1>
+    <div>{{ event.title }} · {{ event.event_date|fdate }}</div>
+    <div class="muted small mono">Event ref # {{ event.reference_number }}</div>
+    {% if contract.status == 'signed' %}<div style="margin-top:.5rem"><span class="stamp ok">Signed</span></div>
+    {% elif contract.status == 'void' %}<div style="margin-top:.5rem"><span class="stamp bad">Void</span></div>{% endif %}
+  </div>
+  {% include "_doc_company.html" %}
+</header>
+
+<div class="contract-body">{{ contract.body }}</div>
+
+<h2>Payment schedule</h2>
+<table class="totals" style="max-width:none">
+  <tr><td>Deposit{% if contract.deposit_due_date %} — due {{ contract.deposit_due_date|fdate('short') }}{% else %} — due at signing{% endif %}</td><td class="num">{{ contract.deposit_amount|money }}</td></tr>
+  <tr><td>Balance{% if contract.balance_due_date %} — due {{ contract.balance_due_date|fdate('short') }}{% endif %}</td><td class="num">{{ (contract.total_amount - contract.deposit_amount)|money }}</td></tr>
+  <tr class="grand"><td>Total</td><td class="num">{{ contract.total_amount|money }}</td></tr>
+</table>
+
+<div class="signature">
+  <div>
+    <div class="sig-line">{{ contract.signed_name or '' }}</div>
+    <div class="sig-label">Client{% if client %}: {{ client.name }}{% endif %}
+      {% if contract.signed_at %}<br>Signed electronically {{ contract.signed_at|fdatetime }}{% if contract.signed_ip %} from {{ contract.signed_ip }}{% endif %}{% endif %}</div>
+  </div>
+  <div>
+    <div class="sig-line"></div>
+    <div class="sig-label">{{ settings.company_name }}</div>
+  </div>
+</div>

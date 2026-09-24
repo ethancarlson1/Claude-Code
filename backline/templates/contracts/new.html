@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf, field %}
+{% block title %}New contract{% endblock %}
+{% block heading %}<h1>New contract</h1><div class="sub">{{ event.title }} · {{ event.event_date|fdate }}</div>{% endblock %}
+{% block content %}
+<form method="post" novalidate>
+  {{ csrf() }}
+  <input type="hidden" name="event_id" value="{{ event.id }}">
+  <fieldset class="card">
+    <legend>Terms</legend>
+    <p class="help">The total is pre-filled with this event's gear rental value ({{ gear_total|money }}). Add labor, delivery or other fees as needed. The contract text is built from the template in <a href="{{ url_for('settings.index') }}#contract">Settings</a> and can be edited next.</p>
+    <div class="grid-form">{% for f in fields %}{{ field(f, values, errors) }}{% endfor %}</div>
+  </fieldset>
+  <div class="form-actions">
+    <button class="btn btn-primary" type="submit">Create contract</button>
+    <a class="btn" href="{{ url_for('events.detail', event_id=event.id, tab='documents') }}">Cancel</a>
+  </div>
+</form>
+{% endblock %}

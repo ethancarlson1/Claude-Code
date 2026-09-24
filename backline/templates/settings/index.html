@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf, form_sections %}
+{% block title %}Settings{% endblock %}
+{% block heading %}<h1>Settings</h1>{% endblock %}
+{% block content %}
+{% include "settings/_tabs.html" %}
+<form method="post" novalidate>
+  {{ csrf() }}
+  {% if errors %}<div class="flash flash-bad">Please fix the highlighted fields.</div>{% endif %}
+  {{ form_sections(grouped, values, errors) }}
+  <fieldset class="card" id="contract">
+    <legend>Contract template</legend>
+    <div class="split">
+      <div class="field{% if errors.contract_template %} has-error{% endif %}">
+        <textarea name="contract_template" rows="30" class="mono" aria-label="Contract template">{{ values.contract_template or '' }}</textarea>
+        {% if errors.contract_template %}<div class="error">{{ errors.contract_template }}</div>{% endif %}
+      </div>
+      <div>
+        <p class="small">New contracts copy this text and fill in these merge fields. Existing contracts don't change.</p>
+        <table class="small">
+          {% for key, label in merge_fields %}<tr><td class="mono nowrap">{{ '{{' }}{{ key }}{{ '}}' }}</td><td>{{ label }}</td></tr>{% endfor %}
+        </table>
+        <p class="help" style="margin-top:.6rem">This is a starting template, not legal advice. Have your attorney review your terms.</p>
+      </div>
+    </div>
+  </fieldset>
+  <div class="form-actions"><button class="btn btn-primary" type="submit">Save settings</button></div>
+</form>
+{% endblock %}

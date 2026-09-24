@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% from "_macros.html" import badge, delete_button %}
+{% block title %}{{ row.name }}{% endblock %}
+{% block heading %}<h1>{{ row.name }}</h1><div class="sub">{{ spec.singular|capitalize }}{% if kind == 'crew' and row.role %} · {{ row.role }}{% endif %}{% if kind == 'clients' and row.company %} · {{ row.company }}{% endif %}</div>{% endblock %}
+{% block actions %}
+  {% if kind == 'clients' %}<a class="btn" href="{{ url_for('events.new') }}">+ New event</a>{% endif %}
+  <a class="btn" href="{{ url_for('people.edit', kind=kind, row_id=row.id) }}">Edit</a>
+{% endblock %}
+{% block content %}
+<div class="split">
+  <div>
+    {% if kind in ('clients', 'venues') %}
+    <section class="card">
+      <h2>Events</h2>
+      {% if events %}
+      <div class="table-wrap"><table><thead><tr><th>Date</th><th>Event</th><th>Status</th></tr></thead><tbody>
+      {% for e in events %}<tr><td class="nowrap">{{ e.event_date|fdate }}</td><td><a href="{{ url_for('events.detail', event_id=e.id) }}">{{ e.title }}</a> <span class="small muted mono">{{ e.reference_number }}</span></td><td>{{ badge(e.status) }}</td></tr>{% endfor %}
+      </tbody></table></div>
+      {% else %}<p class="muted">No events yet.</p>{% endif %}
+    </section>
+    {% endif %}
+    {% if kind == 'clients' %}
+    <section class="card">
+      <h2>Invoices</h2>
+      {% if invoices %}
+      <div class="table-wrap"><table><thead><tr><th>Number</th><th>Issued</th><th>Status</th><th class="num">Total</th><th class="num">Balance</th></tr></thead><tbody>
+      {% for i in invoices %}<tr><td><a href="{{ url_for('invoices.detail', invoice_id=i.row.id) }}">{{ i.row.number }}</a></td><td>{{ i.row.issue_date|fdate('short') }}</td><td>{{ badge(i.status) }}</td><td class="num">{{ i.totals.total|money }}</td><td class="num">{{ i.totals.balance|money }}</td></tr>{% endfor %}
+      </tbody></table></div>
+      {% else %}<p class="muted">No invoices yet.</p>{% endif %}
+    </section>
+    {% endif %}
+    {% if kind == 'crew' %}
+    <section class="card">
+      <h2>Assignments</h2>
+      {% if assignments %}
+      <div class="table-wrap"><table><thead><tr><th>Date</th><th>Event</th><th>Role</th><th>Call</th><th class="num">Est. pay</th><th>Confirmed</th></tr></thead><tbody>
+      {% for a in assignments %}<tr><td class="nowrap">{{ a.event_date|fdate }}</td><td><a href="{{ url_for('events.detail', event_id=a.event_id, tab='crew') }}">{{ a.title }}</a> {{ badge(a.status) }}</td><td>{{ a.role or '' }}</td><td>{{ a.call_time|ftime }}</td>
+        <td class="num">{{ ((a.pay_rate or 0) * ((a.hours or 0) if a.pay_type == 'hourly' else 1))|money }}</td><td>{{ 'Yes' if a.confirmed else 'No' }}</td></tr>{% endfor %}
+      </tbody></table></div>
+      {% else %}<p class="muted">Not assigned to any events yet.</p>{% endif %}
+    </section>
+    {% endif %}
+  </div>
+  <section class="card">
+    <h2>Details</h2>
+    <dl class="facts">
+      {% for f in spec.fields if f.name != 'name' %}
+        {% set v = row[f.name] %}
+        {% if f.type == 'checkbox' %}<dt>{{ f.label }}</dt><dd>{{ 'Yes' if v else 'No' }}</dd>
+        {% elif v not in (none, '') %}
+          <dt>{{ f.label }}</dt>
+          <dd class="{{ 'pre' if f.type == 'textarea' }}">{% if f.type == 'money' %}{{ v|money }}{% elif f.type == 'email' %}<a href="mailto:{{ v }}">{{ v }}</a>{% elif f.type == 'tel' %}<a href="tel:{{ v }}">{{ v }}</a>{% else %}{{ v }}{% endif %}</dd>
+        {% endif %}
+      {% endfor %}
+    </dl>
+    <div style="margin-top:1rem">{{ delete_button(url_for('people.delete', kind=kind, row_id=row.id), row.name ~ (' and their event assignments' if kind == 'crew' else '')) }}</div>
+  </section>
+</div>
+{% endblock %}

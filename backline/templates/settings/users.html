@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf %}
+{% block title %}Users{% endblock %}
+{% block heading %}<h1>Settings</h1>{% endblock %}
+{% block content %}
+{% include "settings/_tabs.html" %}
+<div class="cols">
+  <section class="card">
+    <h2>Users</h2>
+    <table><tbody>
+    {% for u in users %}
+      <tr><td><strong>{{ u.username }}</strong>{% if current_user and u.id == current_user.id %} <span class="muted small">(you)</span>{% endif %}</td>
+        <td class="small muted">since {{ u.created_at|fdate('short') }}</td>
+        <td class="right">{% if not current_user or u.id != current_user.id %}
+          <form method="post" data-confirm="Remove {{ u.username }}?">{{ csrf() }}<input type="hidden" name="action" value="delete"><input type="hidden" name="user_id" value="{{ u.id }}"><button class="link danger small" type="submit">Remove</button></form>
+        {% endif %}</td></tr>
+    {% endfor %}
+    </tbody></table>
+  </section>
+  <section class="card">
+    <h2>Add user</h2>
+    <form method="post">
+      {{ csrf() }}<input type="hidden" name="action" value="add">
+      <div class="field"><label>Username</label><input name="username" required autocomplete="off"></div>
+      <div class="field"><label>Password</label><input name="password" type="password" minlength="8" required autocomplete="new-password"></div>
+      <div class="form-actions"><button class="btn btn-primary" type="submit">Add user</button></div>
+    </form>
+  </section>
+  <section class="card">
+    <h2>Change your password</h2>
+    <form method="post">
+      {{ csrf() }}<input type="hidden" name="action" value="password">
+      <div class="field"><label>Current password</label><input name="current_password" type="password" required autocomplete="current-password"></div>
+      <div class="field"><label>New password</label><input name="new_password" type="password" minlength="8" required autocomplete="new-password"></div>
+      <div class="form-actions"><button class="btn" type="submit">Change password</button></div>
+    </form>
+  </section>
+</div>
+{% endblock %}

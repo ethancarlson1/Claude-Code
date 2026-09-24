@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf %}
+{% block title %}Import inventory{% endblock %}
+{% block heading %}<h1>Import inventory</h1>{% endblock %}
+{% block content %}
+<div class="split">
+  <section class="card">
+    <h2>Upload a CSV</h2>
+    <form method="post" enctype="multipart/form-data">
+      {{ csrf() }}
+      <div class="field"><label for="file">CSV file</label><input id="file" type="file" name="file" accept=".csv,text/csv" required></div>
+      <div class="form-actions"><button class="btn btn-primary" type="submit">Import</button>
+        <a class="btn" href="{{ url_for('inventory.index') }}">Back to inventory</a></div>
+    </form>
+    {% if results %}
+      <h3 style="margin-top:1.2rem">Results</h3>
+      <p>{{ results.added }} item(s) added.</p>
+      {% if results.failed %}
+        <p class="error">{{ results.failed|length }} row(s) skipped:</p>
+        <ul class="small">{% for line, msg in results.failed %}<li>Row {{ line }}: {{ msg }}</li>{% endfor %}</ul>
+      {% endif %}
+    {% endif %}
+  </section>
+  <section class="card">
+    <h2>Format</h2>
+    <p class="small">First row is headers. Only <code>name</code> is required. Recognized columns:</p>
+    <p class="mono small">{{ columns|join(', ') }}</p>
+    <p class="small">Categories: {{ categories|join(', ') }}.</p>
+    <p class="small">Tip: <a href="{{ url_for('inventory.export_csv') }}">export</a> first to get a file in the right shape.</p>
+  </section>
+</div>
+{% endblock %}

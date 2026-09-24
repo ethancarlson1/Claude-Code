@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf %}
+{% block title %}Set up{% endblock %}
+{% block body_class %}auth-page{% endblock %}
+{% block shell %}
+<main class="auth-card card">
+  <h1>Welcome</h1>
+  <p class="muted">Create the first admin account. You can add more users later in Settings.</p>
+  {% if error %}<div class="flash flash-bad">{{ error }}</div>{% endif %}
+  <form method="post">
+    {{ csrf() }}
+    <div class="field"><label for="company_name">Company name</label><input id="company_name" name="company_name" placeholder="e.g. Coastal Audio & Backline"></div>
+    <div class="field"><label for="username">Username</label><input id="username" name="username" autocomplete="username" required></div>
+    <div class="field"><label for="password">Password</label><input id="password" name="password" type="password" minlength="8" autocomplete="new-password" required><div class="help">At least 8 characters.</div></div>
+    <button class="btn btn-primary btn-block" type="submit">Create account</button>
+  </form>
+</main>
+{% endblock %}

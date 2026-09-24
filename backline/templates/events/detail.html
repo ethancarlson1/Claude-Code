@@ -1,0 +1,391 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf, badge, progress, delete_button, empty, copy_link %}
+{% block title %}{{ event.title }}{% endblock %}
+{% block heading %}
+  <h1>{{ event.title }} {{ badge(event.status) }}</h1>
+  <div class="sub"><span class="mono">{{ event.reference_number }}</span> · {{ event.event_date|fdate }}{% if event.end_date %} – {{ event.end_date|fdate }}{% endif %}{% if venue %} · {{ venue.name }}{% endif %}</div>
+{% endblock %}
+{% block actions %}
+  <a class="btn" href="{{ url_for('events.edit', event_id=event.id) }}">Edit</a>
+  <a class="btn" href="{{ url_for('events.worksheet', event_id=event.id) }}" target="_blank">Worksheet</a>
+{% endblock %}
+{% block content %}
+<nav class="tabs">
+  {% set counts = {'crew': crew|length, 'gear': gear|length, 'checklist': checklist|length, 'documents': contracts|length + invoices|length} %}
+  {% for t in ['overview', 'crew', 'gear', 'checklist', 'documents'] %}
+    <a href="{{ url_for('events.detail', event_id=event.id, tab=t) }}" class="{{ 'active' if tab == t }}">
+      {{ {'gear': 'Audio & backline'}.get(t, t|title) }}{% if counts.get(t) %}<span class="count">{{ counts[t] }}</span>{% endif %}
+    </a>
+  {% endfor %}
+</nav>
+
+{% if shortages and tab in ('overview', 'gear') %}
+<div class="alert-box">
+  <strong>Gear conflict:</strong> not enough stock for {{ shortages|length }} item{{ 's' if shortages|length != 1 }} on these dates.
+  <ul>
+  {% for g, a in shortages %}
+    <li>{{ gear_label(g) }} — need {{ a.requested }}, {{ a.available }} available
+      {%- if a.item_status != 'active' %} (item is {{ a.item_status }}){% endif %}
+      {%- if a.conflicts %}; also booked on
+        {% for c in a.conflicts %}<a href="{{ url_for('events.detail', event_id=c.id, tab='gear') }}">{{ c.title }}</a> ({{ c.qty }}){{ ', ' if not loop.last }}{% endfor %}
+      {%- endif %}</li>
+  {% endfor %}
+  </ul>
+  {% if event.status in ('inquiry',) %}<div class="small">This event is an inquiry, so its gear isn't reserved yet.</div>{% endif %}
+</div>
+{% endif %}
+
+{# ------------------------------------------------------------------ OVERVIEW #}
+{% if tab == 'overview' %}
+<div class="split">
+  <div>
+    <section class="card">
+      <h2>Schedule</h2>
+      <dl class="facts">
+        <dt>Date</dt><dd>{{ event.event_date|fdate }}{% if event.end_date %} – {{ event.end_date|fdate }} ({{ days }} days){% endif %}</dd>
+        {% for key, label in [('load_in_time', 'Load-in'), ('soundcheck_time', 'Soundcheck'), ('doors_time', 'Doors'), ('start_time', 'Show start'), ('end_time', 'Show end'), ('load_out_time', 'Load-out')] %}
+          {% if event[key] %}<dt>{{ label }}</dt><dd>{{ event[key]|ftime }}</dd>{% endif %}
+        {% endfor %}
+      </dl>
+    </section>
+    <section class="card">
+      <h2>Details</h2>
+      <dl class="facts">
+        <dt>Type</dt><dd>{{ event.event_type or '—' }}</dd>
+        <dt>Client</dt><dd>{% if client %}<a href="{{ url_for('people.detail', kind='clients', row_id=client.id) }}">{{ client.name }}</a>{% if client.company %} · {{ client.company }}{% endif %}
+          {% if client.phone %}<div class="small">{{ client.phone }}</div>{% endif %}{% if client.email %}<div class="small"><a href="mailto:{{ client.email }}">{{ client.email }}</a></div>{% endif %}{% else %}—{% endif %}</dd>
+        <dt>Venue</dt><dd>{% if venue %}<a href="{{ url_for('people.detail', kind='venues', row_id=venue.id) }}">{{ venue.name }}</a><div class="small">{{ venue_address }}</div>{% else %}—{% endif %}</dd>
+        {% if event.performers %}<dt>Performers</dt><dd>{{ event.performers }}</dd>{% endif %}
+        {% if event.on_site_contact or event.on_site_phone %}<dt>Day-of contact</dt><dd>{{ event.on_site_contact or '' }} {{ event.on_site_phone or '' }}</dd>{% endif %}
+        {% if event.attire %}<dt>Attire</dt><dd>{{ event.attire }}</dd>{% endif %}
+        {% if event.parking %}<dt>Parking / load-in</dt><dd class="pre">{{ event.parking }}</dd>{% endif %}
+        {% if venue and venue.load_in_notes %}<dt>Venue load-in</dt><dd class="pre">{{ venue.load_in_notes }}</dd>{% endif %}
+        {% if venue and venue.power_notes %}<dt>Venue power</dt><dd class="pre">{{ venue.power_notes }}</dd>{% endif %}
+      </dl>
+    </section>
+    {% if event.audio_notes or event.backline_notes or event.power_notes or event.notes %}
+    <section class="card">
+      <h2>Production notes</h2>
+      <dl class="facts">
+        {% if event.audio_notes %}<dt>Audio</dt><dd class="pre">{{ event.audio_notes }}</dd>{% endif %}
+        {% if event.backline_notes %}<dt>Backline</dt><dd class="pre">{{ event.backline_notes }}</dd>{% endif %}
+        {% if event.power_notes %}<dt>Power</dt><dd class="pre">{{ event.power_notes }}</dd>{% endif %}
+        {% if event.notes %}<dt>Internal</dt><dd class="pre">{{ event.notes }}</dd>{% endif %}
+      </dl>
+    </section>
+    {% endif %}
+  </div>
+  <div>
+    <section class="card">
+      <h2>Status</h2>
+      <form method="post" action="{{ url_for('events.set_status', event_id=event.id) }}" class="form-row">
+        {{ csrf() }}
+        <div class="field"><select name="status" aria-label="Status">
+          {% for s in statuses %}<option value="{{ s }}" {% if s == event.status %}selected{% endif %}>{{ s|title }}</option>{% endfor %}
+        </select></div>
+        <button class="btn" type="submit">Update</button>
+      </form>
+      <p class="help" style="margin-top:.5rem">Hold and Confirmed events reserve gear against other bookings.</p>
+    </section>
+    <section class="card">
+      <h2>Readiness</h2>
+      <dl class="facts">
+        <dt>Crew confirmed</dt><dd>{{ progress(crew|selectattr('confirmed')|list|length, crew|length) if crew else '—' }}</dd>
+        <dt>Gear pulled</dt><dd>{{ progress(gear_progress.pulled, gear_progress.total) if gear else '—' }}</dd>
+        <dt>Gear loaded</dt><dd>{{ progress(gear_progress.loaded, gear_progress.total) if gear else '—' }}</dd>
+        <dt>Gear returned</dt><dd>{{ progress(gear_progress.returned, gear_progress.total) if gear else '—' }}</dd>
+        <dt>Checklist</dt><dd>{{ progress(checklist_progress.done, checklist_progress.total) if checklist else '—' }}</dd>
+        <dt>Rental value</dt><dd>{{ gear_total|money }}{% if days > 1 %} <span class="muted small">({{ days }} days)</span>{% endif %}</dd>
+      </dl>
+    </section>
+    <section class="card">
+      <h2>Documents</h2>
+      {% for c in contracts %}
+        <div><a href="{{ url_for('contracts.detail', contract_id=c.id) }}">Contract {{ c.number }}</a> {{ badge(c.status) }}</div>
+      {% endfor %}
+      {% for i in invoices %}
+        <div><a href="{{ url_for('invoices.detail', invoice_id=i.row.id) }}">Invoice {{ i.row.number }}</a> {{ badge(i.status) }} <span class="muted small">{{ i.totals.balance|money }} due</span></div>
+      {% endfor %}
+      {% if not contracts and not invoices %}<p class="muted">No contract or invoice yet.</p>{% endif %}
+      <div class="form-actions">
+        <a class="btn btn-small" href="{{ url_for('contracts.new', event_id=event.id) }}">+ Contract</a>
+        <a class="btn btn-small" href="{{ url_for('invoices.new', event_id=event.id) }}">+ Invoice</a>
+      </div>
+    </section>
+    <section class="card">
+      <h2>More</h2>
+      <form method="post" action="{{ url_for('events.duplicate', event_id=event.id) }}" class="form-row">
+        {{ csrf() }}
+        <div class="field"><label for="dup-date">Copy to a new date</label><input id="dup-date" type="date" name="event_date" value="{{ event.event_date }}"></div>
+        <button class="btn" type="submit">Duplicate</button>
+      </form>
+      <div style="margin-top:1rem">{{ delete_button(url_for('events.delete', event_id=event.id), 'this event, its gear list, crew and checklist', 'Delete event') }}</div>
+    </section>
+  </div>
+</div>
+{% endif %}
+
+{# ---------------------------------------------------------------------- CREW #}
+{% if tab == 'crew' %}
+<section class="card">
+  <div class="card-head"><h2>Crew</h2><span class="muted small">Each person gets a private worksheet link with their call time, role and pay.</span></div>
+  {% if crew %}
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Name</th><th>Role</th><th>Call</th><th>Pay</th><th class="num">Rate</th><th class="num">Hours</th><th class="num">Est. pay</th><th class="check-col">Confirmed</th><th></th></tr></thead>
+    <tbody>
+    {% for a in crew %}
+      {% set fid = 'f-crew-' ~ a.id %}
+      <tr id="crew-{{ a.id }}">
+        <td><strong>{{ a.name }}</strong>{% if a.phone %}<div class="small muted">{{ a.phone }}</div>{% endif %}</td>
+        <td><input form="{{ fid }}" name="role" value="{{ a.role or '' }}" aria-label="Role"></td>
+        <td><input form="{{ fid }}" type="time" name="call_time" value="{{ a.call_time or '' }}" aria-label="Call time"></td>
+        <td><select form="{{ fid }}" name="pay_type" aria-label="Pay type">
+          <option value="flat" {% if a.pay_type == 'flat' %}selected{% endif %}>Flat</option>
+          <option value="hourly" {% if a.pay_type == 'hourly' %}selected{% endif %}>Hourly</option></select></td>
+        <td class="num"><input form="{{ fid }}" type="number" step="0.01" min="0" name="pay_rate" value="{{ '%.2f'|format(a.pay_rate) if a.pay_rate is not none else '' }}" style="width:90px" aria-label="Rate"></td>
+        <td class="num"><input form="{{ fid }}" type="number" step="any" min="0" name="hours" value="{{ '%g'|format(a.hours) if a.hours is not none else '' }}" style="width:70px" aria-label="Hours"></td>
+        <td class="num">{{ ((a.pay_rate or 0) * ((a.hours or 0) if a.pay_type == 'hourly' else 1))|money }}</td>
+        <td class="check-col">
+          <form class="js-toggle" method="post" action="{{ url_for('events.confirm_crew', event_id=event.id, assignment_id=a.id) }}">
+            {{ csrf() }}<input class="big-check" type="checkbox" name="value" value="1" {% if a.confirmed %}checked{% endif %} aria-label="Confirmed">
+          </form>
+        </td>
+        <td class="nowrap">
+          <form id="{{ fid }}" method="post" action="{{ url_for('events.update_crew', event_id=event.id, assignment_id=a.id) }}" class="inline">
+            {{ csrf() }}<input type="hidden" name="notes" value="{{ a.notes or '' }}"><button class="btn btn-small" type="submit">Save</button>
+          </form>
+          <form method="post" action="{{ url_for('events.delete_crew', event_id=event.id, assignment_id=a.id) }}" class="inline" data-confirm="Remove {{ a.name }} from this event?">
+            {{ csrf() }}<button class="btn btn-small btn-danger" type="submit">Remove</button>
+          </form>
+        </td>
+      </tr>
+      {% set link = url_for('public.worksheet', reference=event.reference_number, key=a.worksheet_key, _external=True) %}
+      <tr class="group-row"><td colspan="9" style="text-transform:none;letter-spacing:0;font-weight:500">
+        <div class="form-row"><span class="muted small">Worksheet:</span> {{ copy_link(link, 'Copy link') }}
+        {% if a.email %}<a class="btn btn-small" href="{{ mailto(a.email, 'Worksheet: ' ~ event.title ~ ' — ' ~ event.event_date|fdate, 'Hi ' ~ a.name ~ ',\n\nHere is your worksheet for ' ~ event.title ~ ' on ' ~ event.event_date|fdate ~ ':\n' ~ link ~ '\n\nPlease confirm on the page.\n\nThanks!') }}">Email</a>{% endif %}</div>
+      </td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+    <p class="muted">No crew assigned yet.</p>
+  {% endif %}
+</section>
+<section class="card" id="crew-add">
+  <h2>Add crew</h2>
+  {% if crew_options %}
+  <form method="post" action="{{ url_for('events.add_crew', event_id=event.id) }}" class="form-row">
+    {{ csrf() }}
+    <div class="field grow"><label>Crew member</label>
+      <select name="crew_id" required>{% for c in crew_options %}<option value="{{ c.id }}">{{ c.name }}{% if c.role %} — {{ c.role }}{% endif %}</option>{% endfor %}</select></div>
+    <div class="field"><label>Role</label><input name="role" placeholder="Default from profile"></div>
+    <div class="field"><label>Call time</label><input type="time" name="call_time" value="{{ event.load_in_time or '' }}"></div>
+    <div class="field"><label>Pay type</label><select name="pay_type"><option value="flat">Flat</option><option value="hourly">Hourly</option></select></div>
+    <div class="field tiny"><label>Rate</label><input type="number" step="0.01" min="0" name="pay_rate" placeholder="Default"></div>
+    <div class="field tiny"><label>Hours</label><input type="number" step="any" min="0" name="hours"></div>
+    <button class="btn btn-primary" type="submit">Add</button>
+  </form>
+  {% else %}
+    <p class="muted">No active crew yet. <a href="{{ url_for('people.new', kind='crew') }}">Add crew members</a> first.</p>
+  {% endif %}
+</section>
+{% endif %}
+
+{# ---------------------------------------------------------------------- GEAR #}
+{% if tab == 'gear' %}
+<section class="card">
+  <div class="card-head">
+    <h2>Audio &amp; backline</h2>
+    <div class="form-row small">
+      <span data-progress="pulled">Pulled {{ progress(gear_progress.pulled, gear_progress.total) }}</span>
+      <span data-progress="loaded">Loaded {{ progress(gear_progress.loaded, gear_progress.total) }}</span>
+      <span data-progress="returned">Returned {{ progress(gear_progress.returned, gear_progress.total) }}</span>
+    </div>
+  </div>
+  {% if gear %}
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Avail.</th><th class="num">Rate/day</th><th class="num">Total</th>
+      <th class="check-col">Pulled</th><th class="check-col">Loaded</th><th class="check-col">Returned</th><th>Notes</th><th></th></tr></thead>
+    <tbody>
+    {% for category, rows in gear_groups %}
+      <tr class="group-row"><td colspan="10">{{ category }}</td></tr>
+      {% for g in rows %}
+        {% set a = availability.get(g.item_id) %}
+        {% set fid = 'f-gear-' ~ g.id %}
+        <tr id="gear-{{ g.id }}" class="{{ 'short' if a and a.short }}">
+          <td><strong>{{ gear_label(g) }}</strong>
+            <div class="small muted">
+              {% if g.item_id %}{{ [g.make, g.model]|select|join(' ') }}{% if g.asset_tag %} · #{{ g.asset_tag }}{% endif %}{% if g.location %} · {{ g.location }}{% endif %}
+              {% elif g.description %}<span class="badge badge-warn">sub-rental / not stocked</span>{% endif %}
+            </div></td>
+          <td class="num"><input form="{{ fid }}" type="number" min="1" step="1" name="quantity" value="{{ g.quantity }}" style="width:64px" aria-label="Quantity"></td>
+          <td class="num">{% if a %}<span class="{{ 'error' if a.short }}" title="{{ a.owned }} owned, {{ a.booked_elsewhere }} booked on overlapping events">{{ a.available }}/{{ a.owned }}</span>{% else %}—{% endif %}</td>
+          <td class="num"><input form="{{ fid }}" type="number" min="0" step="0.01" name="rate" value="{{ '%.2f'|format(g.rate) if g.rate is not none else '' }}" style="width:84px" aria-label="Rate"></td>
+          <td class="num">{{ ((g.rate or 0) * g.quantity * days)|money }}</td>
+          {% for field in ['pulled', 'loaded', 'returned'] %}
+          <td class="check-col">
+            <form class="js-toggle" method="post" action="{{ url_for('events.check_gear', event_id=event.id, gear_id=g.id) }}">
+              {{ csrf() }}<input type="hidden" name="field" value="{{ field }}">
+              <input class="big-check" type="checkbox" name="value" value="1" {% if g[field] %}checked{% endif %} aria-label="{{ field|title }}">
+            </form>
+          </td>
+          {% endfor %}
+          <td><input form="{{ fid }}" name="notes" value="{{ g.notes or '' }}" placeholder="Notes" aria-label="Notes">
+            <input form="{{ fid }}" name="return_notes" value="{{ g.return_notes or '' }}" placeholder="Return / damage notes" aria-label="Return notes" style="margin-top:.25rem"></td>
+          <td class="nowrap">
+            <form id="{{ fid }}" method="post" action="{{ url_for('events.update_gear', event_id=event.id, gear_id=g.id) }}" class="inline">{{ csrf() }}<button class="btn btn-small" type="submit">Save</button></form>
+            <form method="post" action="{{ url_for('events.delete_gear', event_id=event.id, gear_id=g.id) }}" class="inline">{{ csrf() }}<button class="btn btn-small btn-danger" type="submit" aria-label="Remove">✕</button></form>
+          </td>
+        </tr>
+      {% endfor %}
+    {% endfor %}
+    </tbody>
+    <tfoot><tr><td colspan="4" class="right">Rental value{% if days > 1 %} ({{ days }} days){% endif %}</td><td class="num">{{ gear_total|money }}</td><td colspan="5"></td></tr></tfoot>
+  </table>
+  </div>
+  <div class="form-row" style="margin-top:.8rem">
+    {% for field in ['pulled', 'loaded', 'returned'] %}
+      <form method="post" action="{{ url_for('events.mark_all_gear', event_id=event.id) }}" class="inline">
+        {{ csrf() }}<input type="hidden" name="field" value="{{ field }}"><button class="btn btn-small" type="submit">Mark all {{ field }}</button>
+      </form>
+    {% endfor %}
+    <a class="btn btn-small" href="{{ url_for('events.worksheet', event_id=event.id) }}#gear" target="_blank">Print pull sheet</a>
+  </div>
+  {% else %}
+    <p class="muted">No gear on this event yet. Add inventory items or sub-rental needs below.</p>
+  {% endif %}
+</section>
+
+<div class="cols">
+<section class="card" id="gear-add">
+  <h2>Add from inventory</h2>
+  <form method="post" action="{{ url_for('events.add_gear', event_id=event.id) }}">
+    {{ csrf() }}
+    <div class="field"><label for="item_id">Item</label>
+      <select id="item_id" name="item_id" required>
+        <option value="">Choose an item…</option>
+        {% for category, items in item_groups %}
+          <optgroup label="{{ category }}">
+          {% for i in items %}
+            {% set free = i.quantity - booked.get(i.id, 0) %}
+            <option value="{{ i.id }}">{{ i.name }}{% if i.model and i.model not in i.name %} ({{ i.model }}){% endif %} — {{ free if free > 0 else 0 }} of {{ i.quantity }} free{% if i.rental_rate %} · {{ i.rental_rate|money }}/day{% endif %}</option>
+          {% endfor %}
+          </optgroup>
+        {% endfor %}
+      </select></div>
+    <div class="form-row">
+      <div class="field tiny"><label>Qty</label><input type="number" name="quantity" min="1" step="1" value="1" required></div>
+      <div class="field tiny"><label>Rate/day</label><input type="number" name="rate" min="0" step="0.01" placeholder="Default"></div>
+      <div class="field grow"><label>Notes</label><input name="notes" placeholder="e.g. stage left, drummer's side"></div>
+    </div>
+    <div class="form-actions"><button class="btn btn-primary" type="submit">Add item</button></div>
+  </form>
+  <p class="help">Availability counts Hold and Confirmed events overlapping {{ event.event_date|fdate('short') }}{% if event.end_date %}–{{ event.end_date|fdate('short') }}{% endif %}.</p>
+</section>
+<section class="card">
+  <h2>Add a need / sub-rental</h2>
+  <form method="post" action="{{ url_for('events.add_gear', event_id=event.id) }}">
+    {{ csrf() }}
+    <div class="field"><label>Description</label><input name="description" required placeholder="e.g. Hammond B3 w/ Leslie 122 (sub-rent from ...)"></div>
+    <div class="form-row">
+      <div class="field"><label>Category</label><select name="category">{% for c in categories %}<option>{{ c }}</option>{% endfor %}</select></div>
+      <div class="field tiny"><label>Qty</label><input type="number" name="quantity" min="1" step="1" value="1" required></div>
+      <div class="field tiny"><label>Rate/day</label><input type="number" name="rate" min="0" step="0.01"></div>
+    </div>
+    <div class="field"><label>Notes</label><input name="notes"></div>
+    <div class="form-actions"><button class="btn" type="submit">Add need</button></div>
+  </form>
+  {% if other_events %}
+  <form method="post" action="{{ url_for('events.copy_gear', event_id=event.id) }}" class="form-row" style="margin-top:1rem;border-top:1px solid var(--border);padding-top:1rem">
+    {{ csrf() }}
+    <div class="field grow"><label>Copy gear list from another event</label>
+      <select name="source_id">{% for o in other_events %}<option value="{{ o.id }}">{{ o.event_date|fdate('short') }} — {{ o.title }}</option>{% endfor %}</select></div>
+    <button class="btn" type="submit">Copy</button>
+  </form>
+  {% endif %}
+</section>
+</div>
+{% endif %}
+
+{# ----------------------------------------------------------------- CHECKLIST #}
+{% if tab == 'checklist' %}
+<div class="split">
+  <section class="card">
+    <div class="card-head"><h2>Checklist</h2><span data-progress="checklist">{{ progress(checklist_progress.done, checklist_progress.total) }}</span></div>
+    {% if checklist %}
+      {% for section, items in checklist_groups %}
+        <div class="check-section">{{ section }}</div>
+        <ul class="checklist">
+        {% for c in items %}
+          <li data-item class="{{ 'done' if c.done }}">
+            <form class="js-toggle toggle" method="post" action="{{ url_for('events.toggle_checklist_item', event_id=event.id, item_id=c.id) }}">
+              {{ csrf() }}<input class="big-check" type="checkbox" name="value" value="1" {% if c.done %}checked{% endif %} aria-label="Done">
+            </form>
+            <span class="text">{{ c.text }}</span>
+            <span class="meta">{% if c.done %}{{ c.done_by or '' }}{% if c.done_at %} · {{ c.done_at|fdatetime }}{% endif %}{% endif %}</span>
+            <form method="post" action="{{ url_for('events.delete_checklist_item', event_id=event.id, item_id=c.id) }}">{{ csrf() }}<button class="link danger small" type="submit" aria-label="Delete item">✕</button></form>
+          </li>
+        {% endfor %}
+        </ul>
+      {% endfor %}
+    {% else %}
+      <p class="muted">No checklist items yet. Apply a template or add items.</p>
+    {% endif %}
+  </section>
+  <div>
+    <section class="card" id="checklist-add">
+      <h2>Add item</h2>
+      <form method="post" action="{{ url_for('events.add_checklist_item', event_id=event.id) }}">
+        {{ csrf() }}
+        <div class="field"><label>Section</label><input name="section" list="sections" placeholder="e.g. Advance"></div>
+        <datalist id="sections">{% for s, _ in checklist_groups %}<option value="{{ s }}">{% endfor %}</datalist>
+        <div class="field"><label>Item</label><input name="text" required></div>
+        <div class="form-actions"><button class="btn btn-primary" type="submit">Add</button></div>
+      </form>
+    </section>
+    <section class="card">
+      <h2>Apply template</h2>
+      {% if templates %}
+      <form method="post" action="{{ url_for('events.apply_template', event_id=event.id) }}" class="form-row">
+        {{ csrf() }}
+        <div class="field grow"><select name="template_id" aria-label="Template">{% for t in templates %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}</select></div>
+        <button class="btn" type="submit">Apply</button>
+      </form>
+      {% endif %}
+      <p class="help"><a href="{{ url_for('settings.checklists') }}">Manage templates</a></p>
+      {% if checklist %}<div style="margin-top:1rem">{{ delete_button(url_for('events.clear_checklist', event_id=event.id), 'every checklist item on this event', 'Clear checklist') }}</div>{% endif %}
+    </section>
+  </div>
+</div>
+{% endif %}
+
+{# ----------------------------------------------------------------- DOCUMENTS #}
+{% if tab == 'documents' %}
+<div class="cols">
+  <section class="card">
+    <div class="card-head"><h2>Contracts</h2><a class="btn btn-small btn-primary" href="{{ url_for('contracts.new', event_id=event.id) }}">+ New contract</a></div>
+    {% if contracts %}
+    <table><thead><tr><th>Number</th><th>Status</th><th class="num">Total</th></tr></thead><tbody>
+      {% for c in contracts %}<tr><td><a href="{{ url_for('contracts.detail', contract_id=c.id) }}">{{ c.number }}</a></td><td>{{ badge(c.status) }}</td><td class="num">{{ c.total_amount|money }}</td></tr>{% endfor %}
+    </tbody></table>
+    {% else %}<p class="muted">No contracts yet. New contracts are pre-filled from this event's details and gear list.</p>{% endif %}
+  </section>
+  <section class="card">
+    <div class="card-head"><h2>Invoices</h2><a class="btn btn-small btn-primary" href="{{ url_for('invoices.new', event_id=event.id) }}">+ New invoice</a></div>
+    {% if invoices %}
+    <table><thead><tr><th>Number</th><th>Status</th><th class="num">Total</th><th class="num">Balance</th></tr></thead><tbody>
+      {% for i in invoices %}<tr><td><a href="{{ url_for('invoices.detail', invoice_id=i.row.id) }}">{{ i.row.number }}</a></td><td>{{ badge(i.status) }}</td><td class="num">{{ i.totals.total|money }}</td><td class="num">{{ i.totals.balance|money }}</td></tr>{% endfor %}
+    </tbody></table>
+    {% else %}<p class="muted">No invoices yet. New invoices are pre-filled with priced gear from the gear list.</p>{% endif %}
+  </section>
+  <section class="card">
+    <h2>Worksheets</h2>
+    <p><a class="btn" href="{{ url_for('events.worksheet', event_id=event.id) }}" target="_blank">Open full worksheet</a></p>
+    <p class="muted small">Crew-specific worksheet links (showing only that person's pay) are on the <a href="{{ url_for('events.detail', event_id=event.id, tab='crew') }}">Crew tab</a>.</p>
+  </section>
+</div>
+{% endif %}
+{% endblock %}

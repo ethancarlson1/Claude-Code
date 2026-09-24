@@ -1,0 +1,130 @@
+{% extends "doc_base.html" %}
+{% from "_macros.html" import csrf %}
+{% block title %}Worksheet · {{ event.title }}{% endblock %}
+{% block toolbar %}
+  {% if admin %}<a class="btn" href="{{ url_for('events.detail', event_id=event.id) }}">&larr; Back to event</a>{% endif %}
+{% endblock %}
+{% block document %}
+<header class="doc-head">
+  <div>
+    <div class="muted small">EVENT WORKSHEET</div>
+    <h1>{{ event.title }}</h1>
+    <div><strong>{{ event.event_date|fdate }}</strong>{% if event.end_date %} – {{ event.end_date|fdate }}{% endif %}</div>
+    <div class="muted small mono">Ref # {{ event.reference_number }}</div>
+    {% if event.status in ('inquiry', 'hold', 'cancelled') %}<div style="margin-top:.4rem"><span class="stamp {{ 'bad' if event.status == 'cancelled' else 'warn' }}">{{ event.status }}</span></div>{% endif %}
+  </div>
+  {% include "_doc_company.html" %}
+</header>
+
+{% if assignment %}
+<section class="you">
+  <div style="display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap;align-items:center">
+    <div>
+      <div class="muted small">PREPARED FOR</div>
+      <div style="font-size:1.15rem;font-weight:650">{{ assignment.name }}</div>
+      <div>{{ assignment.role or 'Crew' }}{% if assignment.call_time %} · Call time <strong>{{ assignment.call_time|ftime }}</strong>{% endif %}</div>
+      {% if assignment.pay_rate %}
+      <div>Pay: {{ assignment.pay_rate|money }}{% if assignment.pay_type == 'hourly' %}/hr{% if assignment.hours %} × {{ assignment.hours }} hrs = {{ (assignment.pay_rate * assignment.hours)|money }} est.{% endif %}{% else %} flat{% endif %}</div>
+      {% endif %}
+      {% if assignment.notes %}<div class="small">{{ assignment.notes }}</div>{% endif %}
+    </div>
+    <form method="post" action="{{ url_for('public.confirm', reference=event.reference_number, key=assignment.worksheet_key) }}" class="no-print">
+      {{ csrf() }}
+      {% if assignment.confirmed %}
+        <div><span class="stamp ok">Confirmed</span></div>
+        <button class="link small" type="submit" name="decline" value="1" style="margin-top:.4rem">I can no longer make it</button>
+      {% else %}
+        <button class="btn btn-primary" type="submit">Confirm I'm booked</button>
+      {% endif %}
+    </form>
+  </div>
+</section>
+{% endif %}
+
+<h2>Schedule</h2>
+<div class="timeline">
+  {% for key, label in [('load_in_time', 'Load-in'), ('soundcheck_time', 'Soundcheck'), ('doors_time', 'Doors'), ('start_time', 'Show'), ('end_time', 'End'), ('load_out_time', 'Load-out')] %}
+    {% if event[key] %}<div><span class="label">{{ label }}</span><span class="time">{{ event[key]|ftime }}</span></div>{% endif %}
+  {% endfor %}
+</div>
+
+<div class="cols" style="margin-top:.5rem">
+  <div>
+    <h2>Event</h2>
+    <dl class="facts">
+      {% if event.event_type %}<dt>Type</dt><dd>{{ event.event_type }}</dd>{% endif %}
+      {% if client %}<dt>Client</dt><dd>{{ client.name }}{% if client.company %} ({{ client.company }}){% endif %}</dd>{% endif %}
+      {% if event.performers %}<dt>Performers</dt><dd>{{ event.performers }}</dd>{% endif %}
+      {% if event.on_site_contact or event.on_site_phone %}<dt>Day-of contact</dt><dd>{{ event.on_site_contact or '' }}{% if event.on_site_phone %} · <a class="nowrap" href="tel:{{ event.on_site_phone }}">{{ event.on_site_phone }}</a>{% endif %}</dd>{% endif %}
+      {% if event.attire %}<dt>Attire</dt><dd>{{ event.attire }}</dd>{% endif %}
+    </dl>
+  </div>
+  <div>
+    <h2>Venue</h2>
+    {% if venue %}
+    <dl class="facts">
+      <dt>Venue</dt><dd><strong>{{ venue.name }}</strong></dd>
+      {% if venue_address %}<dt>Address</dt><dd><a href="https://www.google.com/maps/search/?api=1&query={{ (venue.name ~ ', ' ~ venue_address)|urlencode }}" target="_blank" rel="noopener">{{ venue_address }}</a></dd>{% endif %}
+      {% if venue.contact_name or venue.contact_phone %}<dt>Venue contact</dt><dd>{{ venue.contact_name or '' }}{% if venue.contact_phone %} · <a class="nowrap" href="tel:{{ venue.contact_phone }}">{{ venue.contact_phone }}</a>{% endif %}</dd>{% endif %}
+    </dl>
+    {% else %}<p class="muted">Venue TBD</p>{% endif %}
+  </div>
+</div>
+
+{% set logistics = [('Parking & load-in', event.parking), ('Venue load-in', venue.load_in_notes if venue), ('Venue parking', venue.parking_notes if venue), ('Power', event.power_notes), ('Venue power', venue.power_notes if venue), ('Stage', venue.stage_notes if venue), ('Audio', event.audio_notes), ('Backline', event.backline_notes)] %}
+{% if logistics|selectattr(1)|list %}
+<h2>Production &amp; logistics</h2>
+<dl class="facts">
+  {% for label, text in logistics if text %}<dt>{{ label }}</dt><dd class="pre">{{ text }}</dd>{% endfor %}
+  {% if admin and event.notes %}<dt>Internal notes</dt><dd class="pre">{{ event.notes }}</dd>{% endif %}
+</dl>
+{% endif %}
+
+<h2>Crew</h2>
+{% if crew %}
+<table>
+  <thead><tr><th>Name</th><th>Role</th><th>Call</th><th>Phone</th>{% if admin %}<th class="num">Pay</th><th>Confirmed</th>{% endif %}</tr></thead>
+  <tbody>
+  {% for c in crew %}
+    <tr{% if assignment and c.id == assignment.id %} style="font-weight:650"{% endif %}>
+      <td>{{ c.name }}</td><td>{{ c.role or '' }}</td><td class="nowrap">{{ c.call_time|ftime }}</td>
+      <td class="nowrap">{% if c.phone %}<a href="tel:{{ c.phone }}">{{ c.phone }}</a>{% endif %}</td>
+      {% if admin %}<td class="num">{{ ((c.pay_rate or 0) * ((c.hours or 0) if c.pay_type == 'hourly' else 1))|money }}</td><td>{{ 'Yes' if c.confirmed else 'No' }}</td>{% endif %}
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}<p class="muted">Crew TBD</p>{% endif %}
+
+<h2 id="gear">Audio &amp; backline</h2>
+{% if gear_groups %}
+<table>
+  <thead><tr><th style="width:48px">Qty</th><th>Item</th><th>Notes</th><th class="check-col">Pulled</th><th class="check-col">Loaded</th><th class="check-col">Returned</th></tr></thead>
+  <tbody>
+  {% for category, rows in gear_groups %}
+    <tr class="group-row"><td colspan="6">{{ category }}</td></tr>
+    {% for g in rows %}
+    <tr>
+      <td class="num">{{ g.quantity }}</td>
+      <td>{{ gear_label(g) }}{% if g.item_id and (g.make or g.model) %} <span class="muted small">{{ [g.make, g.model]|select|join(' ') }}</span>{% endif %}{% if g.asset_tag %} <span class="muted small">#{{ g.asset_tag }}</span>{% endif %}</td>
+      <td class="small">{{ g.notes or '' }}</td>
+      {% for f in ['pulled', 'loaded', 'returned'] %}<td class="check-col"><span class="box{{ ' checked' if g[f] }}"></span></td>{% endfor %}
+    </tr>
+    {% endfor %}
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}<p class="muted">Gear list TBD</p>{% endif %}
+
+{% if checklist_groups %}
+<h2>Checklist</h2>
+{% for section, items in checklist_groups %}
+  <div class="check-section">{{ section }}</div>
+  <ul class="checklist">
+    {% for c in items %}<li class="{{ 'done' if c.done }}"><span class="box{{ ' checked' if c.done }}"></span><span class="text">{{ c.text }}</span></li>{% endfor %}
+  </ul>
+{% endfor %}
+{% endif %}
+
+<p class="muted small" style="margin-top:2rem">Generated {{ today()|fdate }} · Questions? Contact {{ settings.company_name }}{% if settings.company_phone %} at {{ settings.company_phone }}{% endif %}.</p>
+{% endblock %}

@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% from "_macros.html" import delete_button %}
+{% block title %}Checklist templates{% endblock %}
+{% block heading %}<h1>Settings</h1>{% endblock %}
+{% block actions %}<a class="btn btn-primary" href="{{ url_for('settings.checklist_form') }}">+ New template</a>{% endblock %}
+{% block content %}
+{% include "settings/_tabs.html" %}
+<div class="card">
+  <p class="muted small">Templates are reusable checklists you can add to any event, e.g. an advance checklist, a show-day checklist or a festival-specific one.</p>
+  {% if templates %}
+  <table>
+    <thead><tr><th>Name</th><th>Description</th><th class="num">Items</th><th></th></tr></thead>
+    <tbody>
+    {% for t in templates %}
+      <tr><td><a href="{{ url_for('settings.checklist_form', template_id=t.id) }}"><strong>{{ t.name }}</strong></a></td><td>{{ t.description or '' }}</td><td class="num">{{ t.item_count }}</td>
+        <td class="right">{{ delete_button(url_for('settings.delete_checklist', template_id=t.id), 'template ' ~ t.name) }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p class="muted">No templates yet.</p>{% endif %}
+</div>
+{% endblock %}

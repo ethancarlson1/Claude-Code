@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% from "_macros.html" import badge, delete_button %}
+{% block title %}{{ item.name }}{% endblock %}
+{% block heading %}<h1>{{ item.name }} {{ badge(item.status) }}</h1><div class="sub">{{ item.category }}{% if item.asset_tag %} · #{{ item.asset_tag }}{% endif %}</div>{% endblock %}
+{% block actions %}<a class="btn" href="{{ url_for('inventory.edit', item_id=item.id) }}">Edit</a>{% endblock %}
+{% block content %}
+<div class="split">
+  <div>
+    {% if out_now %}
+    <div class="flash flash-warn">Currently out: pulled for
+      {% for b in out_now %}<a href="{{ url_for('events.detail', event_id=b.id, tab='gear') }}">{{ b.title }}</a> ({{ b.event_date|fdate('short') }}){{ ', ' if not loop.last }}{% endfor %}
+      and not yet returned.</div>
+    {% endif %}
+    <section class="card">
+      <h2>Upcoming bookings</h2>
+      {% if upcoming %}
+      <table><thead><tr><th>Date</th><th>Event</th><th>Status</th><th class="num">Qty</th></tr></thead><tbody>
+      {% for b in upcoming %}
+        <tr><td class="nowrap">{{ b.event_date|fdate }}</td><td><a href="{{ url_for('events.detail', event_id=b.id, tab='gear') }}">{{ b.title }}</a></td><td>{{ badge(b.status) }}</td><td class="num">{{ b.qty }} of {{ item.quantity }}</td></tr>
+      {% endfor %}
+      </tbody></table>
+      {% else %}<p class="muted">Not booked on any upcoming events.</p>{% endif %}
+    </section>
+    {% if damage_notes %}
+    <section class="card">
+      <h2>Return &amp; damage notes</h2>
+      <ul>{% for n in damage_notes %}<li>{{ n.event_date|fdate('short') }} — <a href="{{ url_for('events.detail', event_id=n.event_id, tab='gear') }}">{{ n.title }}</a>: {{ n.return_notes }}</li>{% endfor %}</ul>
+    </section>
+    {% endif %}
+    <section class="card">
+      <h2>History</h2>
+      {% if past %}
+      <table><thead><tr><th>Date</th><th>Event</th><th>Status</th><th class="num">Qty</th></tr></thead><tbody>
+      {% for b in past %}
+        <tr><td class="nowrap">{{ b.event_date|fdate }}</td><td><a href="{{ url_for('events.detail', event_id=b.id, tab='gear') }}">{{ b.title }}</a></td><td>{{ badge(b.status) }}</td><td class="num">{{ b.qty }}</td></tr>
+      {% endfor %}
+      </tbody></table>
+      <p class="help">Used on {{ past|length }} past event{{ 's' if past|length != 1 }}.</p>
+      {% else %}<p class="muted">No past events.</p>{% endif %}
+    </section>
+  </div>
+  <section class="card">
+    <h2>Details</h2>
+    <dl class="facts">
+      {% for f in fields if f.name not in ('name', 'status') %}
+        {% set v = item[f.name] %}
+        {% if v not in (none, '') %}
+          <dt>{{ f.label }}</dt>
+          <dd class="{{ 'pre' if f.type == 'textarea' }}">{% if f.type == 'money' %}{{ v|money }}{% elif f.type == 'date' %}{{ v|fdate('short') }}{% else %}{{ v }}{% endif %}</dd>
+        {% endif %}
+      {% endfor %}
+    </dl>
+    <div style="margin-top:1rem">{{ delete_button(url_for('inventory.delete', item_id=item.id), item.name) }}</div>
+  </section>
+</div>
+{% endblock %}
