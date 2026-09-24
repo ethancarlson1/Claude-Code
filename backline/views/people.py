@@ -15,7 +15,7 @@ KINDS = {
         "search": ["name", "company", "email", "phone"],
         "columns": [("name", "Name"), ("company", "Company"), ("email", "Email"), ("phone", "Phone")],
         "fields": [
-            Field("name", "Name", required=True, placeholder="e.g. Daniel Lange"),
+            Field("name", "Name", required=True, placeholder="e.g. Sofia Alvarez"),
             Field("company", "Company / organization"),
             Field("email", "Email", type="email"),
             Field("phone", "Phone", type="tel"),
@@ -59,6 +59,7 @@ KINDS = {
             Field("phone", "Phone", type="tel"),
             Field("day_rate", "Day rate", type="money"),
             Field("hourly_rate", "Hourly rate", type="money"),
+            Field("dietary", "Dietary restrictions", placeholder="For crew meal counts, e.g. vegetarian"),
             Field("active", "Active (available for booking)", type="checkbox", default=1),
             Field("notes", "Notes", type="textarea", placeholder="Skills, certifications, vehicle, availability..."),
         ],

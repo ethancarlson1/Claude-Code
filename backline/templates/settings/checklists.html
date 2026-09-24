@@ -9,10 +9,10 @@
   <p class="muted small">Templates are reusable checklists you can add to any event, e.g. an advance checklist, a show-day checklist or a festival-specific one.</p>
   {% if templates %}
   <table>
-    <thead><tr><th>Name</th><th>Description</th><th class="num">Items</th><th></th></tr></thead>
+    <thead><tr><th>Name</th><th>Description</th><th>On crew worksheets</th><th class="num">Items</th><th></th></tr></thead>
     <tbody>
     {% for t in templates %}
-      <tr><td><a href="{{ url_for('settings.checklist_form', template_id=t.id) }}"><strong>{{ t.name }}</strong></a></td><td>{{ t.description or '' }}</td><td class="num">{{ t.item_count }}</td>
+      <tr><td><a href="{{ url_for('settings.checklist_form', template_id=t.id) }}"><strong>{{ t.name }}</strong></a></td><td>{{ t.description or '' }}</td><td>{{ 'Yes' if t.crew_visible else 'No (office only)' }}</td><td class="num">{{ t.item_count }}</td>
         <td class="right">{{ delete_button(url_for('settings.delete_checklist', template_id=t.id), 'template ' ~ t.name) }}</td></tr>
     {% endfor %}
     </tbody>

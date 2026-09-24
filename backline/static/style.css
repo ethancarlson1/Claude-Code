@@ -67,7 +67,7 @@ p { margin: 0 0 .8em; }
 }
 .brand { display: flex; align-items: center; gap: .6rem; padding: 1.1rem 1rem; color: #fff; font-weight: 600; }
 .brand:hover { text-decoration: none; }
-.brand-mark { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 8px; background: var(--accent); color: #fff; flex: none; }
+.brand-mark { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 8px; background: #d2132f; color: #fff; flex: none; }
 .brand-name { font-size: .95rem; line-height: 1.2; }
 .nav { list-style: none; margin: 0; padding: .25rem .6rem 1rem; }
 .nav a { display: block; padding: .45rem .7rem; border-radius: 6px; color: var(--sidebar-ink); font-size: .93rem; }
@@ -286,6 +286,54 @@ body.doc-page { background: var(--bg); }
   .doc .signature { grid-template-columns: 1fr; }
 }
 
+/* Crew worksheet: the layout mirrors a band gig worksheet (icon rows, ruled section heads) */
+.ws { --ws-accent: #d2132f; --ws-soft: #fdecee; }
+.ws-top { text-align: center; margin-bottom: 1.4rem; }
+.ws-date { font-size: 1.4rem; color: #555d6e; margin-bottom: .35rem; }
+.doc .ws-top h1 { font-size: 1.45rem; margin: 0 0 .25rem; }
+.doc .you { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; background: var(--ws-soft); border-color: #f6c5cc; }
+.you-name { font-size: 1.15rem; font-weight: 700; }
+.ws-section { margin-top: 2.2rem; }
+.ws-head { display: flex; align-items: center; gap: .6rem; border-bottom: 4px solid var(--ws-accent); padding-bottom: .45rem; margin-bottom: .9rem; break-after: avoid; }
+.ws-icon { color: var(--ws-accent); display: flex; width: 20px; flex: none; }
+.ws-icon-spacer { width: 20px; flex: none; }
+.doc .ws-head h2 { flex: 1; text-align: center; margin: 0; padding: 0; border: 0; font-size: 1.02rem; letter-spacing: .08em; color: #1c2230; font-weight: 700; }
+.ws-rows { display: grid; grid-template-columns: minmax(150px, 200px) minmax(0, 1fr); }
+.ws-row { display: contents; }
+.ws-label { display: flex; gap: .55rem; align-items: flex-start; font-weight: 650; font-size: .86rem; padding: .45rem .75rem .45rem 0; }
+.ws-label .icon { flex: none; margin-top: .12rem; }
+.ws-value { padding: .45rem 0; min-width: 0; overflow-wrap: anywhere; }
+.doc a.pill, .pill { display: inline-block; border: 1.5px solid var(--ws-accent); color: #1c2230; border-radius: 999px; padding: .05rem .65rem; font-size: .76rem; font-weight: 650; margin: .15rem .3rem .15rem 0; text-decoration: none; white-space: nowrap; }
+.doc a.pill:hover { background: var(--ws-soft); }
+.timings { list-style: none; padding: 0; margin: .25rem 0; }
+.timings li { padding: .08rem 0; }
+.ws-guide { font-weight: 700; margin-top: .45rem; }
+.ws-run { background: #f8f9fb; border: 1px solid #e2e5ea; border-radius: 6px; padding: .9rem 1rem; margin-top: 1rem; line-height: 1.55; }
+.ws-note { display: flex; gap: .45rem; align-items: center; margin: .8rem 0 0; }
+.ws-note .icon { color: var(--ws-accent); }
+.ws-roster tr.me td { background: var(--ws-soft); font-weight: 600; }
+.ws-faq { font-size: 13px; line-height: 1.55; }
+.status-confirmed, .status-completed { color: #1f8a4c; }
+.status-hold, .status-inquiry { color: #a86400; }
+.status-cancelled { color: #c0362c; }
+.chat .msg { border: 1px solid #e2e5ea; border-radius: 10px; padding: .5rem .8rem; margin: .5rem 0; max-width: 85%; background: #fff; }
+.chat .msg.staff { background: #f4f5f7; }
+.chat .msg.mine { margin-left: auto; background: var(--ws-soft); border-color: #f6c5cc; }
+.msg-meta { font-size: .75rem; color: #6b7385; margin-bottom: .15rem; }
+.chat-form { display: flex; gap: .5rem; align-items: flex-end; margin-top: .8rem; }
+.chat-form textarea { flex: 1; }
+.doc textarea, .doc input { background: #fff; color: #1c2230; border-color: #d0d5dd; }
+@media (max-width: 640px) {
+  .ws-rows { grid-template-columns: 1fr; }
+  .ws-label { padding-bottom: 0; }
+  .ws-value { padding-top: .15rem; border-bottom: 1px solid #eef0f3; }
+  .chat .msg { max-width: 100%; }
+}
+
+/* Event chat in the office view */
+.chat-admin .msg { border: 1px solid var(--border); border-radius: 10px; padding: .5rem .8rem; margin: .5rem 0; background: var(--surface-2); }
+.chat-admin .msg.staff { background: var(--accent-soft); }
+
 @media print {
   body, body.doc-page { background: #fff; }
   .sidebar, .topbar, .doc-toolbar, .no-print, .flash { display: none !important; }
@@ -294,5 +342,5 @@ body.doc-page { background: var(--bg); }
   .doc { border: 0; box-shadow: none; margin: 0; padding: 0; max-width: none; }
   .card { box-shadow: none; }
   a { color: inherit; }
-  tr, .checklist li { break-inside: avoid; }
+  tr, .checklist li, .ws-row { break-inside: avoid; }
 }

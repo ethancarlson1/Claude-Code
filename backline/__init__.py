@@ -1,5 +1,5 @@
-"""Backline Ops: scheduling, inventory, contracts and invoicing for an
-audio and backline rental company."""
+"""Chicago Sound and Backline: scheduling, inventory, crew worksheets,
+contracts and invoicing for an audio and backline rental company."""
 
 import os
 import secrets

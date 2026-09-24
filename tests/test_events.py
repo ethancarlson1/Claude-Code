@@ -7,17 +7,17 @@ from .conftest import query
 
 
 def _event_form(**overrides):
-    data = {"title": "Lange / Daniel Wedding", "status": "confirmed", "event_date": "2030-11-07"}
+    data = {"title": "Alvarez / Reed Wedding", "status": "confirmed", "event_date": "2030-11-07"}
     data.update(overrides)
     return data
 
 
 def test_create_event_builds_reference_and_checklists(client, app, make):
-    client_id = make("clients", name="Daniel Lange")
+    client_id = make("clients", name="Sofia Alvarez")
     resp = client.post("/events/new", data={**_event_form(client_id=client_id), "templates": ["1", "2"]})
     assert resp.status_code == 302
     event = query(app, "SELECT * FROM events", one=True)
-    assert re.fullmatch(r"2030-11-07-Lange-Daniel-[A-Z0-9]{4}", event["reference_number"])
+    assert re.fullmatch(r"2030-11-07-Alvarez-Sofia-[A-Z0-9]{4}", event["reference_number"])
     counts = query(app, "SELECT COUNT(*) AS n FROM event_checklist_items WHERE event_id = ?", (event["id"],), one=True)
     template_items = query(app, "SELECT COUNT(*) AS n FROM checklist_template_items WHERE template_id IN (1, 2)", one=True)
     assert counts["n"] == template_items["n"] > 0

@@ -7,12 +7,13 @@
 {% endblock %}
 {% block actions %}
   <a class="btn" href="{{ url_for('events.edit', event_id=event.id) }}">Edit</a>
+  <a class="btn" href="{{ url_for('events.ics', event_id=event.id) }}">Add to calendar</a>
   <a class="btn" href="{{ url_for('events.worksheet', event_id=event.id) }}" target="_blank">Worksheet</a>
 {% endblock %}
 {% block content %}
 <nav class="tabs">
-  {% set counts = {'crew': crew|length, 'gear': gear|length, 'checklist': checklist|length, 'documents': contracts|length + invoices|length} %}
-  {% for t in ['overview', 'crew', 'gear', 'checklist', 'documents'] %}
+  {% set counts = {'crew': crew|length, 'gear': gear|length, 'checklist': checklist|length, 'chat': messages|length, 'documents': contracts|length + invoices|length} %}
+  {% for t in ['overview', 'crew', 'gear', 'checklist', 'chat', 'documents'] %}
     <a href="{{ url_for('events.detail', event_id=event.id, tab=t) }}" class="{{ 'active' if tab == t }}">
       {{ {'gear': 'Audio & backline'}.get(t, t|title) }}{% if counts.get(t) %}<span class="count">{{ counts[t] }}</span>{% endif %}
     </a>
@@ -43,10 +44,13 @@
       <h2>Schedule</h2>
       <dl class="facts">
         <dt>Date</dt><dd>{{ event.event_date|fdate }}{% if event.end_date %} – {{ event.end_date|fdate }} ({{ days }} days){% endif %}</dd>
-        {% for key, label in [('load_in_time', 'Load-in'), ('soundcheck_time', 'Soundcheck'), ('doors_time', 'Doors'), ('start_time', 'Show start'), ('end_time', 'Show end'), ('load_out_time', 'Load-out')] %}
+        {% for key, label in [('load_in_time', 'Load-in'), ('soundcheck_time', 'Setup complete'), ('doors_time', 'Doors'), ('start_time', 'Show start'), ('end_time', 'Show end'), ('load_out_time', 'Load-out')] %}
           {% if event[key] %}<dt>{{ label }}</dt><dd>{{ event[key]|ftime }}</dd>{% endif %}
         {% endfor %}
       </dl>
+      {% if event.run_of_show %}
+        <details style="margin-top:.8rem"><summary class="small"><strong>Run of show</strong></summary><div class="pre small" style="margin-top:.5rem">{{ event.run_of_show }}</div></details>
+      {% endif %}
     </section>
     <section class="card">
       <h2>Details</h2>
@@ -54,23 +58,29 @@
         <dt>Type</dt><dd>{{ event.event_type or '—' }}</dd>
         <dt>Client</dt><dd>{% if client %}<a href="{{ url_for('people.detail', kind='clients', row_id=client.id) }}">{{ client.name }}</a>{% if client.company %} · {{ client.company }}{% endif %}
           {% if client.phone %}<div class="small">{{ client.phone }}</div>{% endif %}{% if client.email %}<div class="small"><a href="mailto:{{ client.email }}">{{ client.email }}</a></div>{% endif %}{% else %}—{% endif %}</dd>
-        <dt>Venue</dt><dd>{% if venue %}<a href="{{ url_for('people.detail', kind='venues', row_id=venue.id) }}">{{ venue.name }}</a><div class="small">{{ venue_address }}</div>{% else %}—{% endif %}</dd>
+        {% if event.honorees %}<dt>Couple / honorees</dt><dd>{{ event.honorees }}</dd>{% endif %}
+        {% if event.guest_count %}<dt>Guests</dt><dd>{{ event.guest_count }}</dd>{% endif %}
+        <dt>Producer</dt><dd>{% if producer %}<a href="{{ url_for('people.detail', kind='crew', row_id=producer.id) }}">{{ producer.name }}</a>{% if producer.phone %} <span class="small muted">{{ producer.phone }}</span>{% endif %}{% else %}<span class="muted">Not set — worksheets point crew to the office</span>{% endif %}</dd>
+        {% if venue2 %}<dt>{{ event.venue2_label or 'Earlier location' }}</dt><dd><a href="{{ url_for('people.detail', kind='venues', row_id=venue2.id) }}">{{ venue2.name }}</a><div class="small">{{ venue2_address }}</div></dd>{% endif %}
+        <dt>{{ event.venue_label or 'Venue' }}</dt><dd>{% if venue %}<a href="{{ url_for('people.detail', kind='venues', row_id=venue.id) }}">{{ venue.name }}</a><div class="small">{{ venue_address }}</div>{% else %}—{% endif %}</dd>
         {% if event.performers %}<dt>Performers</dt><dd>{{ event.performers }}</dd>{% endif %}
         {% if event.on_site_contact or event.on_site_phone %}<dt>Day-of contact</dt><dd>{{ event.on_site_contact or '' }} {{ event.on_site_phone or '' }}</dd>{% endif %}
-        {% if event.attire %}<dt>Attire</dt><dd>{{ event.attire }}</dd>{% endif %}
+        {% if event.attire %}<dt>Dress code</dt><dd>{{ event.attire }}</dd>{% endif %}
+        {% if event.crew_meal %}<dt>Crew meal</dt><dd>{{ event.crew_meal }}</dd>{% endif %}
         {% if event.parking %}<dt>Parking / load-in</dt><dd class="pre">{{ event.parking }}</dd>{% endif %}
         {% if venue and venue.load_in_notes %}<dt>Venue load-in</dt><dd class="pre">{{ venue.load_in_notes }}</dd>{% endif %}
         {% if venue and venue.power_notes %}<dt>Venue power</dt><dd class="pre">{{ venue.power_notes }}</dd>{% endif %}
       </dl>
     </section>
-    {% if event.audio_notes or event.backline_notes or event.power_notes or event.notes %}
+    {% if event.audio_notes or event.backline_notes or event.power_notes or event.crew_notes or event.notes %}
     <section class="card">
       <h2>Production notes</h2>
       <dl class="facts">
         {% if event.audio_notes %}<dt>Audio</dt><dd class="pre">{{ event.audio_notes }}</dd>{% endif %}
         {% if event.backline_notes %}<dt>Backline</dt><dd class="pre">{{ event.backline_notes }}</dd>{% endif %}
         {% if event.power_notes %}<dt>Power</dt><dd class="pre">{{ event.power_notes }}</dd>{% endif %}
-        {% if event.notes %}<dt>Internal</dt><dd class="pre">{{ event.notes }}</dd>{% endif %}
+        {% if event.crew_notes %}<dt>Special requests <span class="small">(crew only)</span></dt><dd class="pre">{{ event.crew_notes }}</dd>{% endif %}
+        {% if event.notes %}<dt>Office notes</dt><dd class="pre">{{ event.notes }}</dd>{% endif %}
       </dl>
     </section>
     {% endif %}
@@ -324,7 +334,7 @@
             <form class="js-toggle toggle" method="post" action="{{ url_for('events.toggle_checklist_item', event_id=event.id, item_id=c.id) }}">
               {{ csrf() }}<input class="big-check" type="checkbox" name="value" value="1" {% if c.done %}checked{% endif %} aria-label="Done">
             </form>
-            <span class="text">{{ c.text }}</span>
+            <span class="text">{{ c.text }}{% if not c.crew_visible %} <span class="badge badge-muted" title="Not shown on crew worksheets">office</span>{% endif %}</span>
             <span class="meta">{% if c.done %}{{ c.done_by or '' }}{% if c.done_at %} · {{ c.done_at|fdatetime }}{% endif %}{% endif %}</span>
             <form method="post" action="{{ url_for('events.delete_checklist_item', event_id=event.id, item_id=c.id) }}">{{ csrf() }}<button class="link danger small" type="submit" aria-label="Delete item">✕</button></form>
           </li>
@@ -343,6 +353,7 @@
         <div class="field"><label>Section</label><input name="section" list="sections" placeholder="e.g. Advance"></div>
         <datalist id="sections">{% for s, _ in checklist_groups %}<option value="{{ s }}">{% endfor %}</datalist>
         <div class="field"><label>Item</label><input name="text" required></div>
+        <label class="check"><input type="checkbox" name="crew_visible" value="1" checked> Show on crew worksheets</label>
         <div class="form-actions"><button class="btn btn-primary" type="submit">Add</button></div>
       </form>
     </section>
@@ -360,6 +371,29 @@
     </section>
   </div>
 </div>
+{% endif %}
+
+{# ---------------------------------------------------------------------- CHAT #}
+{% if tab == 'chat' %}
+<section class="card" style="max-width:820px">
+  <div class="card-head"><h2>Crew chat</h2><span class="muted small">Shown on every crew worksheet for this event. Crew reply from their worksheet link.</span></div>
+  <div class="chat-admin">
+    {% for m in messages %}
+      <div class="msg{{ ' staff' if not m.crew_id }}">
+        <div class="small muted"><strong>{{ m.author }}</strong>{% if not m.crew_id and m.author|lower != 'office' %} · office{% endif %} · {{ m.created_at|fdatetime }}
+          <form method="post" action="{{ url_for('events.delete_message', event_id=event.id, message_id=m.id) }}" class="inline" data-confirm="Delete this message?">{{ csrf() }}<button class="link danger small" type="submit" aria-label="Delete message">✕</button></form></div>
+        <div class="pre">{{ m.body }}</div>
+      </div>
+    {% else %}
+      <p class="muted">No messages yet. Post load-in changes, parking updates or questions here.</p>
+    {% endfor %}
+  </div>
+  <form method="post" action="{{ url_for('events.post_message', event_id=event.id) }}" id="chat-form" class="form-row" style="margin-top:.8rem">
+    {{ csrf() }}
+    <div class="field grow"><textarea name="body" rows="2" required placeholder="Message the crew…" aria-label="Message"></textarea></div>
+    <button class="btn btn-primary" type="submit">Send</button>
+  </form>
+</section>
 {% endif %}
 
 {# ----------------------------------------------------------------- DOCUMENTS #}

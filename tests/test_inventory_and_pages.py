@@ -48,10 +48,10 @@ def test_cannot_delete_item_used_on_events(client, app, make):
 
 
 def test_people_crud(client, app):
-    resp = client.post("/venues/new", data={"name": "Blue Door", "city": "Bayview"})
+    resp = client.post("/venues/new", data={"name": "Blue Door", "city": "Chicago"})
     venue_id = int(resp.headers["Location"].rsplit("/", 1)[1])
-    client.post(f"/venues/{venue_id}/edit", data={"name": "Blue Door Club", "city": "Bayview"})
-    assert query(app, "SELECT name FROM venues", one=True)["name"] == "Blue Door Club"
+    client.post(f"/venues/{venue_id}/edit", data={"name": "Blue Door Lounge", "city": "Chicago"})
+    assert query(app, "SELECT name FROM venues", one=True)["name"] == "Blue Door Lounge"
     client.post("/crew/new", data={"name": "Jordan", "day_rate": "300"})  # active unchecked -> 0
     assert query(app, "SELECT active, day_rate FROM crew", one=True) == {"active": 0, "day_rate": 300}
     assert client.get("/nope/1").status_code == 404
@@ -61,11 +61,11 @@ def test_people_crud(client, app):
 
 def test_settings_and_checklist_templates(client, app):
     client.post("/settings", data={
-        "company_name": "Coastal Audio", "default_tax_rate": "8.5", "deposit_percent": "40",
+        "company_name": "Chicago Sound and Backline", "default_tax_rate": "8.5", "deposit_percent": "40",
         "invoice_prefix": "CA-", "contract_prefix": "K-", "contract_template": "Hi {{client_name}}",
     })
     with app.app_context():
-        assert dbm.get_setting("company_name") == "Coastal Audio"
+        assert dbm.get_setting("company_name") == "Chicago Sound and Backline"
         assert dbm.get_setting("default_tax_rate") == "8.5"
     client.post("/settings/checklists/new", data={
         "name": "Festival", "items": "# Advance\n- [ ] Get rider\nConfirm power\n\n# Show\nLine check",
@@ -82,9 +82,9 @@ def test_util_formatting():
     assert util.money(1234.5) == "$1,234.50"
     assert util.money(-3) == "-$3.00"
     assert util.fdate("2026-11-07") == "Sat, Nov 7, 2026"
-    assert re.fullmatch(r"2026-11-07-Lange-Daniel-[A-Z0-9]{4}", util.gen_reference("2026-11-07", "Daniel Lange"))
-    assert re.fullmatch(r"2026-11-07-Harbor-Lights-Festival-[A-Z0-9]{4}",
-                        util.gen_reference("2026-11-07", "Harbor Lights Festival"))
+    assert re.fullmatch(r"2026-11-07-Alvarez-Sofia-[A-Z0-9]{4}", util.gen_reference("2026-11-07", "Sofia Alvarez"))
+    assert re.fullmatch(r"2026-11-07-Lakefront-Harvest-Festival-[A-Z0-9]{4}",
+                        util.gen_reference("2026-11-07", "Lakefront Harvest Festival"))
     assert re.fullmatch(r"2026-11-07-Spring-Gala-[A-Z0-9]{4}", util.gen_reference("2026-11-07", None, "Spring Gala"))
 
 
@@ -105,7 +105,7 @@ def test_every_page_renders_with_demo_data(seeded, app):
              "/crew", "/clients", "/venues", "/crew/1", "/clients/1", "/venues/1", "/contracts", "/contracts/new",
              "/invoices", "/invoices/new", "/settings", "/settings/checklists", "/settings/checklists/1", "/settings/users"]
     for e in events:
-        pages += [f"/events/{e}?tab={t}" for t in ("overview", "crew", "gear", "checklist", "documents")]
+        pages += [f"/events/{e}?tab={t}" for t in ("overview", "crew", "gear", "checklist", "chat", "documents")]
         pages += [f"/events/{e}/edit", f"/events/{e}/worksheet", f"/contracts/new?event_id={e}", f"/invoices/new?event_id={e}"]
     pages += [f"/contracts/{c}" for c in contracts] + [f"/invoices/{i}" for i in invoices]
     pages += [f"/invoices/{i}/edit" for i in invoices] + [f"/inventory/{i}" for i in items[:5]]
@@ -115,6 +115,6 @@ def test_every_page_renders_with_demo_data(seeded, app):
 
 def test_demo_data_shows_expected_alerts(seeded):
     page = seeded.get("/").data.decode()
-    assert "Gear conflicts" in page and "Harbor Lights Music Festival" in page
+    assert "Gear conflicts" in page and "Lakefront Harvest Festival" in page
     assert "Gear not checked back in" in page
     assert "Overdue invoices" in page

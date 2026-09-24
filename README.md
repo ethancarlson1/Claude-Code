@@ -1,44 +1,55 @@
-# Backline Ops
+# Chicago Sound and Backline
 
-A web app for an audio and backline rental company. It keeps the schedule, the gear inventory, each event's audio and backline needs (with pull/load/return checklists), crew worksheets, contracts and invoices in one place.
+The operations platform for Chicago Sound and Backline. It keeps the schedule, the gear inventory, each event's audio and backline needs (with pull/load/return checklists), crew worksheets, contracts and invoices in one place.
 
 It is a small Flask + SQLite app: one Python dependency, one database file, no build step.
 
 ## Features
 
 **Scheduling**
-- Events with a readable reference number (`2026-11-07-Lange-Daniel-TJ1R`), status (inquiry → hold → confirmed → completed / cancelled), client, venue, performers and a full day-of timeline (load-in, soundcheck, doors, show, end, load-out). Multi-day events are supported.
-- Month calendar, a searchable event list, and a dashboard that flags what needs attention in the next 14 days: unconfirmed crew, missing gear lists, gear not pulled, open checklists, gear conflicts, gear not returned, unsigned contracts and overdue invoices.
-- Duplicate an event to a new date. The gear list and checklist are copied; crew, contracts and invoices are not.
+- Events with a readable reference number (`2026-10-10-Alvarez-Sofia-RBYC`) and a status (inquiry, hold, confirmed, completed or cancelled).
+- Each event records the client, the couple or honorees, guest count and a **producer** (the crew's point person).
+- Up to two locations per event, e.g. a ceremony and a reception.
+- A day-of timeline (load-in, setup complete, doors, show, end, load-out) plus a free-form **run of show**. New events start from a run-of-show template.
+- A month calendar, a searchable event list, and a dashboard that flags what needs attention in the next 14 days: unconfirmed crew, missing gear lists, gear not pulled, open checklists, gear conflicts, gear not returned, unsigned contracts and overdue invoices.
+- "Add to calendar" (.ics) for the office and for each crew member.
 
-**Crew worksheets** (modeled on a band's per-musician worksheet)
-- Assign crew with a role, call time and pay (flat or hourly). If you leave the rate blank, it defaults from the crew member's profile.
-- Each assignment gets a private worksheet link: `/worksheet/<event-reference>/<key>`. The page shows the schedule, venue and load-in details, production notes, the crew list, the gear list and the checklist. It shows only that person's pay, and they can confirm or decline from the page.
-- A full admin worksheet with everyone's pay doubles as a printable pull sheet.
+**Crew worksheets**
+
+These are modeled on the per-musician gig worksheet a band sends its players. Each crew assignment gets a private link, `/worksheet/<event-reference>/<key>`, laid out in the same sections:
+
+| Section | What's in it |
+| --- | --- |
+| Basic info | Booking status, date and Add to iCal, event type, the producer with Call/Text/Email buttons, dress code, guest count, couple/client, terms of use, payment (their own pay only), and event timings ("You are on A1 / FOH…") |
+| Location & venue | Each location with Open in Maps, venue manager contacts, day-of contact |
+| Crew | Roster with role, call time, phone and dietary notes, plus the crew meal |
+| Special requests | Crew-only notes. Clients never see these. |
+| Schedule | Timings, the run of show, and load-in, parking and power notes from the event and the venue |
+| Audio & backline | The gear list with Pulled / Loaded / Returned boxes |
+| Crew checklist | Crew-visible checklist items only. Office items like "Deposit received" are hidden. |
+| Additional notes & FAQs | Standing company policies (call time, power, hard surfaces, weather, meals, gear) |
+| Crew chat | A message thread shared by the crew, the producer and the office |
+
+Crew can accept or decline the call from the page. The office copy of the worksheet adds everyone's pay, confirmations and office notes, and doubles as a printable pull sheet.
 
 **Inventory and gear**
 - Items with category, make/model, serial and asset tag, quantity owned, condition, status (active / maintenance / retired), location, rental rate and replacement value. CSV import and export are included.
 - Each event has an **Audio & backline** list. Add items from inventory, or add free-text needs and sub-rentals for anything you don't stock.
 - **Availability and conflicts:** Hold and Confirmed events reserve gear. If overlapping events need more units than you own, or an item is in maintenance, the shortfall is flagged and the other bookings are named.
-- **Warehouse checklist:** every gear line has Pulled / Loaded / Returned checkboxes, plus return and damage notes. "Mark all" buttons are included, and items still out after a show appear on the dashboard.
-- Each item's page shows its upcoming bookings, history and damage notes.
+- **Warehouse checklist:** every gear line has Pulled / Loaded / Returned checkboxes and return/damage notes. Items still out after a show appear on the dashboard.
 
 **Checklists**
-- Reusable checklist templates with sections. Three defaults ship with the app: Advance & Prep, Show Day, and Load-Out & Return. You can edit them or add your own under Settings.
-- Apply templates when creating an event or later. Items can be added one at a time. Ticking an item records who did it and when.
+- Reusable templates with sections, each marked "show on crew worksheets" or office-only. Three ship with the app: Advance & Prep (office), Show Day, and Load-Out & Return. Ticking an item records who did it and when.
 
 **Contracts**
-- Generated from an editable template with merge fields (client, venue, times, gear list, total, deposit, due dates). The total is pre-filled from the event's gear rental value, and the deposit uses your default percentage.
-- Workflow: draft → sent → signed (or void). Sent contracts get a client link where the client types their name and ticks "I agree". The app records the name, time and IP address. Signed contracts are locked.
+- Generated from an editable template with merge fields (client, venue, times, gear list, total, deposit, due dates). The total is pre-filled from the gear rental value.
+- Workflow: draft → sent → signed (or void). Sent contracts get a client link where the client types their name and ticks "I agree". The app records the name, time and IP address, and signed contracts are locked.
 
 **Invoices**
-- Line items can be pre-filled from the event's priced gear list, with multi-day rates handled. Each line can be marked taxable or not. You can add a discount and a tax rate.
-- Record payments. Status is derived automatically: draft, sent, partial, paid, overdue or void. The invoice list shows totals for outstanding, overdue and collected this month.
-- Sent invoices get a client link. Contracts, invoices and worksheets all print cleanly and can be saved as PDF from the browser.
+- Line items can be pre-filled from the event's priced gear list. Each line can be marked taxable or not. You can add a discount and a tax rate, and record payments.
+- Status is derived automatically: draft, sent, partial, paid, overdue or void. Sent invoices get a client link.
 
-**Other**
-- Login with multiple users, and CSRF protection on every form.
-- "Email" buttons open your mail app with the link already written in. No mail server is needed.
+Contracts, invoices and worksheets all print cleanly and can be saved as PDF from the browser. Other features: multiple users, CSRF protection, and "Email" buttons that open your mail app with the link already written in.
 
 ## Quick start
 
@@ -47,20 +58,31 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 
-flask --app backline seed        # optional: load demo inventory, crew, events, contracts, invoices
+flask --app backline seed        # optional: demo data for Chicago Sound and Backline
 flask --app backline run         # http://127.0.0.1:5000
 ```
 
-On first visit you'll be asked to create the admin account and company name. Company details, tax rate, deposit %, number prefixes, invoice terms and the contract template are under **Settings**.
+On first visit you'll create the admin account. The company name is pre-filled as Chicago Sound and Backline. Under **Settings** you can set:
+- company details and billing defaults
+- the contract template
+- the crew worksheet text: terms of use, payment, additional notes & FAQs, and the run-of-show starter
 
-The demo data is dated relative to today. It includes a Twin Reverb conflict between a festival hold and a club gig, a wedding contract waiting for signature, an overdue invoice and a cymbal pack not yet returned, so every dashboard alert has something to show.
+The demo data is dated relative to today:
+- An Alvarez / Reed wedding with a ceremony at Maplewood Chapel and a reception at Riverbend Country Club. It has a full run of show, special requests and crew chat.
+- A Fulton Market corporate show.
+- A Lakefront festival hold that conflicts with a Blue Door Lounge gig over Twin Reverbs.
+- An overdue invoice and a cymbal pack that was never returned.
+
+All demo people, venues, phone numbers (555-01xx) and emails are fictional.
 
 Other commands:
 
 ```bash
 flask --app backline create-user <username>   # add a login from the shell
-flask --app backline init-db                  # create tables (also runs automatically on startup)
+flask --app backline init-db                  # create/upgrade tables (also runs automatically on startup)
 ```
+
+Upgrading an existing database needs no extra step. New columns are added on startup, and a database still using the old placeholder company name is renamed to Chicago Sound and Backline.
 
 ## Running it for real
 
@@ -87,7 +109,17 @@ pip install pytest
 pytest
 ```
 
-The suite covers login, setup and CSRF; reference numbers; gear conflict rules (overlapping dates, inquiries and cancellations not reserving, maintenance items); checklist and gear toggles; crew defaults; event duplication; invoice math (pre-tax discount across taxable and non-taxable lines), status derivation and numbering; contract merge fields and the signing flow; worksheet privacy; CSV import; and a render check of every page against the demo data.
+The suite covers:
+- login, setup and CSRF
+- gear conflict rules
+- checklist and gear toggles
+- invoice math and statuses
+- the contract signing flow
+- worksheet sections and privacy: only the viewer's own pay, crew-only notes kept from clients, office-only checklist items hidden
+- crew chat and calendar invites
+- the database migration
+- CSV import
+- a render check of every page against the demo data
 
 ## Project layout
 
@@ -95,21 +127,21 @@ The suite covers login, setup and CSRF; reference numbers; gear conflict rules (
 backline/
   __init__.py        app factory
   schema.sql         tables
-  db.py              database helpers, default settings/checklists/contract template, CLI commands
+  db.py              database helpers, migrations, default settings/checklists/contract + worksheet text
   auth.py            login, first-run setup, CSRF
   forms.py           declarative form fields + validation
-  services.py        gear availability, totals, invoice math, contract rendering
-  seed.py            demo data
-  views/             dashboard, events (crew/gear/checklists/calendar), inventory,
+  services.py        gear availability, totals, invoice math, contract rendering, iCal export
+  seed.py            Chicago demo data
+  views/             dashboard, events (crew/gear/checklists/chat/calendar), inventory,
                      people (clients/venues/crew), contracts, invoices, settings,
-                     public (worksheets, contract signing, client invoices)
+                     public (crew worksheets, contract signing, client invoices)
   templates/, static/
 tests/
 ```
 
 ## Known limits / ideas for next steps
 
-- Email goes through `mailto:` links. Sending automatically (SMTP, Postmark, etc.) and reminders for unsigned contracts or overdue invoices would be natural additions.
+- Email goes through `mailto:` links. Sending automatically (SMTP, Postmark, etc.), texting crew their worksheet link, and push notifications for new chat messages would be natural additions.
 - There are no online payments. A Stripe payment link on the client invoice page would be a small addition.
-- The e-signature is a typed name plus an agreement checkbox, with a time and IP audit record. Check that this meets your jurisdiction's requirements. The default contract text is a starting point, not legal advice.
-- Possible additions: an iCal feed per crew member, stage plot and input list uploads, gear "kits" (e.g. a standard drum package), and barcode scanning for check-in and check-out.
+- The e-signature is a typed name plus an agreement checkbox, with a time and IP audit record. Check that this meets Illinois requirements. The default contract and crew policy text is a starting point, not legal advice.
+- Possible additions: a per-crew iCal feed of all their calls, stage plot and input list uploads, gear "kits", and barcode scanning for check-in and check-out.

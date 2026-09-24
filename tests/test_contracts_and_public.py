@@ -2,9 +2,9 @@ from .conftest import query
 
 
 def _event_with_gear(make):
-    cl = make("clients", name="Daniel Lange", email="d@example.com")
-    venue = make("venues", name="Bayview Ballroom", address="100 Harbor Way", city="Bayview", state="CA")
-    event = make("events", title="Lange Wedding", reference_number="2030-11-07-Lange-Daniel-TJ1R",
+    cl = make("clients", name="Sofia Alvarez", email="sofia@example.com")
+    venue = make("venues", name="Riverbend Country Club", address="River Rd", city="Elmwood Park", state="IL")
+    event = make("events", title="Alvarez Wedding", reference_number="2030-11-07-Alvarez-Sofia-TJ1R",
                  client_id=cl, venue_id=venue, event_date="2030-11-07", start_time="18:00", status="confirmed")
     make("event_gear", event_id=event, description="Fender Twin Reverb", quantity=1, rate=95)
     make("event_gear", event_id=event, description="Shure SM58", quantity=6, rate=8)
@@ -22,8 +22,8 @@ def test_contract_created_from_template(client, app, make):
     assert resp.status_code == 302
     contract = query(app, "SELECT * FROM contracts", one=True)
     body = contract["body"]
-    assert "Daniel Lange" in body
-    assert "Bayview Ballroom, 100 Harbor Way, Bayview, CA" in body
+    assert "Sofia Alvarez" in body
+    assert "Riverbend Country Club, River Rd, Elmwood Park, IL" in body
     assert "6 x Shure SM58" in body
     assert "$1,000.00" in body and "$500.00" in body
     assert "6:00 PM" in body
@@ -49,14 +49,14 @@ def test_contract_signing_flow(client, anon, app, make):
     page = anon.get(f"/c/{key}")
     assert page.status_code == 200 and b"Sign this agreement" in page.data
 
-    resp = anon.post(f"/c/{key}/sign", data={"signed_name": "Daniel Lange"})
+    resp = anon.post(f"/c/{key}/sign", data={"signed_name": "Sofia Alvarez"})
     assert resp.status_code == 400  # must tick agree
-    anon.post(f"/c/{key}/sign", data={"signed_name": "Daniel Lange", "agree": "1"})
+    anon.post(f"/c/{key}/sign", data={"signed_name": "Sofia Alvarez", "agree": "1"})
     contract = query(app, "SELECT * FROM contracts", one=True)
-    assert contract["status"] == "signed" and contract["signed_name"] == "Daniel Lange" and contract["signed_at"]
+    assert contract["status"] == "signed" and contract["signed_name"] == "Sofia Alvarez" and contract["signed_at"]
 
     anon.post(f"/c/{key}/sign", data={"signed_name": "Someone Else", "agree": "1"})
-    assert query(app, "SELECT signed_name FROM contracts", one=True)["signed_name"] == "Daniel Lange"
+    assert query(app, "SELECT signed_name FROM contracts", one=True)["signed_name"] == "Sofia Alvarez"
     # Signed contracts are locked.
     assert client.get(f"/contracts/{contract['id']}/edit").status_code == 302
     client.post(f"/contracts/{contract['id']}/delete")
@@ -69,7 +69,7 @@ def test_crew_worksheet_is_private_per_person(anon, app, make):
     sam = make("crew", name="Sam Reyes", phone="555-2222")
     make("event_crew", event_id=event, crew_id=maya, role="A1", call_time="14:00", pay_rate=450, worksheet_key="mayakey")
     make("event_crew", event_id=event, crew_id=sam, role="Stagehand", pay_rate=280, worksheet_key="samkey")
-    ref = "2030-11-07-Lange-Daniel-TJ1R"
+    ref = "2030-11-07-Alvarez-Sofia-TJ1R"
 
     page = anon.get(f"/worksheet/{ref}/mayakey").data.decode()
     assert "PREPARED FOR" in page and "Maya Ortiz" in page and "$450.00" in page

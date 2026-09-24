@@ -16,6 +16,14 @@ COMPANY_FIELDS = [
     Field("invoice_prefix", "Invoice number prefix", section="Billing", help="e.g. INV- gives INV-2026-0001"),
     Field("contract_prefix", "Contract number prefix", section="Billing"),
     Field("invoice_terms", "Default invoice terms", type="textarea", section="Billing"),
+    Field("crew_terms", "Terms of use", type="textarea", rows=4, section="Crew worksheets",
+          help="Shown to crew under Basic Info. Accepting a call means agreeing to these."),
+    Field("crew_payment_terms", "Payment", type="textarea", rows=4, section="Crew worksheets",
+          help="How and when crew get paid. Shown next to their pay."),
+    Field("worksheet_notes", "Additional notes & FAQs", type="textarea", rows=16, section="Crew worksheets",
+          help="Standing policies printed at the bottom of every worksheet."),
+    Field("run_of_show_template", "Run-of-show starter", type="textarea", rows=12, section="Crew worksheets",
+          help="Pre-filled into new events' run of show."),
 ]
 
 
@@ -87,10 +95,12 @@ def checklist_form(template_id=None):
     items_text = _items_to_text(db.query(
         "SELECT section, text FROM checklist_template_items WHERE template_id = ? ORDER BY sort, id", (template_id,)
     )) if template else ""
+    crew_visible = template["crew_visible"] if template else 1
     error = None
     if request.method == "POST":
         name = request.form.get("name", "").strip()
         description = request.form.get("description", "").strip()
+        crew_visible = 1 if request.form.get("crew_visible") else 0
         items_text = request.form.get("items", "")
         items = _text_to_items(items_text)
         if not name or not items:
@@ -98,12 +108,13 @@ def checklist_form(template_id=None):
         else:
             conn = db.get_db()
             if template:
-                conn.execute("UPDATE checklist_templates SET name = ?, description = ? WHERE id = ?",
-                             (name, description, template_id))
+                conn.execute("UPDATE checklist_templates SET name = ?, description = ?, crew_visible = ? WHERE id = ?",
+                             (name, description, crew_visible, template_id))
                 conn.execute("DELETE FROM checklist_template_items WHERE template_id = ?", (template_id,))
             else:
-                template_id = conn.execute("INSERT INTO checklist_templates (name, description) VALUES (?, ?)",
-                                           (name, description)).lastrowid
+                template_id = conn.execute(
+                    "INSERT INTO checklist_templates (name, description, crew_visible) VALUES (?, ?, ?)",
+                    (name, description, crew_visible)).lastrowid
             for sort, (section, text) in enumerate(items):
                 conn.execute(
                     "INSERT INTO checklist_template_items (template_id, section, text, sort) VALUES (?, ?, ?, ?)",
@@ -113,7 +124,8 @@ def checklist_form(template_id=None):
             flash(f"Saved checklist template '{name}'.", "ok")
             return redirect(url_for("settings.checklists"))
     return render_template("settings/checklist_form.html", template=template, name=name,
-                           description=description, items_text=items_text, error=error)
+                           description=description, items_text=items_text, crew_visible=crew_visible,
+                           error=error)
 
 
 @bp.route("/settings/checklists/<int:template_id>/delete", methods=["POST"])

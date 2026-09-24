@@ -19,6 +19,7 @@ class Field:
         placeholder=None,
         wide=False,
         default=None,
+        rows=3,
     ):
         self.name = name
         self.label = label
@@ -30,6 +31,7 @@ class Field:
         self.placeholder = placeholder
         self.wide = wide or type == "textarea"
         self.default = default
+        self.rows = rows
 
     def options(self):
         """Select options as (value, label) pairs; callables are resolved lazily."""

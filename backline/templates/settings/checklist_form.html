@@ -8,6 +8,8 @@
   {% if error %}<div class="flash flash-bad">{{ error }}</div>{% endif %}
   <div class="field"><label for="name">Name</label><input id="name" name="name" value="{{ name }}" required></div>
   <div class="field"><label for="description">Description</label><input id="description" name="description" value="{{ description }}"></div>
+  <label class="check" style="margin:.4rem 0 .8rem"><input type="checkbox" name="crew_visible" value="1" {% if crew_visible %}checked{% endif %}> Show on crew worksheets
+    <span class="muted small">— untick for office tasks like contracts and deposits</span></label>
   <div class="field"><label for="items">Items</label>
     <textarea id="items" name="items" rows="18" class="mono">{{ items_text }}</textarea>
     <div class="help">One item per line. Start a line with <code>#</code> to begin a section, e.g. <code># Load-in</code>.</div></div>

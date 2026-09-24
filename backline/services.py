@@ -2,6 +2,7 @@
 invoice math and contract rendering."""
 
 import re
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from . import db, util
@@ -168,6 +169,7 @@ def apply_checklist_template(event_id, template_id):
         "SELECT COALESCE(MAX(sort), -1) + 1 FROM event_checklist_items WHERE event_id = ?",
         (event_id,),
     )
+    crew_visible = db.scalar("SELECT crew_visible FROM checklist_templates WHERE id = ?", (template_id,))
     items = db.query(
         "SELECT section, text FROM checklist_template_items WHERE template_id = ? ORDER BY sort, id",
         (template_id,),
@@ -175,8 +177,8 @@ def apply_checklist_template(event_id, template_id):
     conn = db.get_db()
     for offset, item in enumerate(items):
         conn.execute(
-            "INSERT INTO event_checklist_items (event_id, section, text, sort) VALUES (?, ?, ?, ?)",
-            (event_id, item["section"], item["text"], start + offset),
+            "INSERT INTO event_checklist_items (event_id, section, text, crew_visible, sort) VALUES (?, ?, ?, ?, ?)",
+            (event_id, item["section"], item["text"], crew_visible, start + offset),
         )
     conn.commit()
     return len(items)
@@ -335,3 +337,55 @@ def render_contract(template, event, number, total, deposit, deposit_due, balanc
         "balance_due_date": util.fdate(balance_due) or "the event date",
     }
     return MERGE_FIELD.sub(lambda m: str(values.get(m.group(1), m.group(0))), template)
+
+
+# --- Calendar export -----------------------------------------------------------
+
+def _ics_escape(text):
+    return (text or "").replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace("\n", "\\n")
+
+
+def _ics_fold(line):
+    """Fold lines longer than 75 octets, as RFC 5545 requires."""
+    out, raw = [], line.encode("utf-8")
+    while len(raw) > 75:
+        cut = 75
+        while (raw[cut] & 0xC0) == 0x80:  # don't split a UTF-8 character
+            cut -= 1
+        out.append(raw[:cut].decode("utf-8"))
+        raw = b" " + raw[cut:]
+    out.append(raw.decode("utf-8"))
+    return "\r\n".join(out)
+
+
+def event_ics(event, uid, summary, description="", start_time=None):
+    """A single-event iCalendar file. Times are "floating" (the viewer's local
+    time), which is right for crews working in the venue's time zone."""
+    _client, venue = event_context(event)
+    start_date = util.parse_date(event["event_date"])
+    end_date = util.parse_date(util.event_end(event))
+    start_time = start_time or event["load_in_time"] or event["start_time"]
+    end_time = event["load_out_time"] or event["end_time"]
+    if start_time:
+        start = datetime.combine(start_date, datetime.strptime(start_time, "%H:%M").time())
+        if end_time:
+            end = datetime.combine(end_date, datetime.strptime(end_time, "%H:%M").time())
+            if end <= start:
+                end += timedelta(days=1)  # load-out after midnight
+        else:
+            end = start + timedelta(hours=4)
+        when = [f"DTSTART:{start:%Y%m%dT%H%M%S}", f"DTEND:{end:%Y%m%dT%H%M%S}"]
+    else:
+        when = [f"DTSTART;VALUE=DATE:{start_date:%Y%m%d}",
+                f"DTEND;VALUE=DATE:{end_date + timedelta(days=1):%Y%m%d}"]
+    location = ", ".join(p for p in [venue["name"] if venue else "", venue_address(venue)] if p)
+    lines = [
+        "BEGIN:VCALENDAR", "VERSION:2.0", f"PRODID:-//{db.get_setting('company_name')}//Worksheets//EN",
+        "CALSCALE:GREGORIAN", "METHOD:PUBLISH", "BEGIN:VEVENT",
+        f"UID:{uid}", f"DTSTAMP:{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}", *when,
+        f"SUMMARY:{_ics_escape(summary)}",
+        f"LOCATION:{_ics_escape(location)}",
+        f"DESCRIPTION:{_ics_escape(description)}",
+        "END:VEVENT", "END:VCALENDAR",
+    ]
+    return "\r\n".join(_ics_fold(line) for line in lines) + "\r\n"

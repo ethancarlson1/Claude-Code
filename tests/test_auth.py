@@ -12,7 +12,7 @@ def test_first_visit_redirects_to_setup(anon):
 
 def test_setup_creates_admin_and_company(client):
     assert client.get("/").status_code == 200
-    assert b"Test Audio" in client.get("/").data
+    assert b"Chicago Sound and Backline" in client.get("/").data
 
 
 def test_setup_is_closed_once_a_user_exists(client, anon):

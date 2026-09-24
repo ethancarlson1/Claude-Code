@@ -1,7 +1,7 @@
 """Pages shared outside the office: crew worksheets, contract signing and
 client invoices. Each is reached through an unguessable per-record key."""
 
-from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
+from flask import Blueprint, Response, abort, flash, redirect, render_template, request, url_for
 
 from .. import db, services, util
 from .events import worksheet_context
@@ -37,6 +37,34 @@ def confirm(reference, key):
     db.update("event_crew", assignment["id"], {"confirmed": confirmed})
     flash("Thanks — you're confirmed for this event." if confirmed else "Got it — we've marked you as not confirmed.", "ok")
     return redirect(url_for("public.worksheet", reference=reference, key=key))
+
+
+@bp.route("/worksheet/<reference>/<key>/messages", methods=["POST"])
+def post_message(reference, key):
+    assignment = _assignment(reference, key)
+    body = request.form.get("body", "").strip()
+    if body:
+        db.insert("event_messages", {
+            "event_id": assignment["event_id"], "crew_id": assignment["crew_id"], "author": assignment["name"],
+            "body": body[:4000], "created_at": util.now_iso(),
+        })
+    return redirect(url_for("public.worksheet", reference=reference, key=key) + "#chat")
+
+
+@bp.route("/worksheet/<reference>/<key>/event.ics")
+def worksheet_ics(reference, key):
+    assignment = _assignment(reference, key)
+    event = db.query("SELECT * FROM events WHERE id = ?", (assignment["event_id"],), one=True)
+    company = db.get_setting("company_name")
+    role = f" ({assignment['role']})" if assignment["role"] else ""
+    body = services.event_ics(
+        event, uid=f"{event['reference_number']}-{assignment['id']}@backline",
+        summary=f"{company}: {event['title']}{role}",
+        description="Worksheet: " + url_for("public.worksheet", reference=reference, key=key, _external=True),
+        start_time=assignment["call_time"],
+    )
+    return Response(body, mimetype="text/calendar",
+                    headers={"Content-Disposition": f"attachment; filename={event['reference_number']}.ics"})
 
 
 def _contract(key):

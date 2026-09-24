@@ -1,4 +1,4 @@
--- Backline Ops schema (SQLite)
+-- Chicago Sound and Backline operations schema (SQLite)
 
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY,
@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS crew (
     phone TEXT,
     day_rate REAL,
     hourly_rate REAL,
+    dietary TEXT,
     notes TEXT,
     active INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -81,7 +82,13 @@ CREATE TABLE IF NOT EXISTS events (
     event_type TEXT,
     status TEXT NOT NULL DEFAULT 'inquiry',      -- inquiry | hold | confirmed | completed | cancelled
     client_id INTEGER REFERENCES clients(id) ON DELETE SET NULL,
+    producer_id INTEGER REFERENCES crew(id) ON DELETE SET NULL,  -- event lead / point person
+    honorees TEXT,                               -- e.g. the couple at a wedding
+    guest_count INTEGER,
     venue_id INTEGER REFERENCES venues(id) ON DELETE SET NULL,
+    venue_label TEXT,                            -- e.g. "Reception"
+    venue2_id INTEGER REFERENCES venues(id) ON DELETE SET NULL,
+    venue2_label TEXT,                           -- e.g. "Ceremony"
     event_date TEXT NOT NULL,                    -- YYYY-MM-DD
     end_date TEXT,                               -- YYYY-MM-DD, multi-day events
     load_in_time TEXT,
@@ -98,7 +105,10 @@ CREATE TABLE IF NOT EXISTS events (
     audio_notes TEXT,
     backline_notes TEXT,
     power_notes TEXT,
-    notes TEXT,
+    crew_meal TEXT,
+    run_of_show TEXT,                            -- free-form schedule shown on worksheets
+    crew_notes TEXT,                             -- "special requests": crew only, never shown to clients
+    notes TEXT,                                  -- office only
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -137,10 +147,21 @@ CREATE TABLE IF NOT EXISTS event_gear (
     sort INTEGER NOT NULL DEFAULT 0
 );
 
+-- Crew chat on the event worksheet ("gig chat").
+CREATE TABLE IF NOT EXISTS event_messages (
+    id INTEGER PRIMARY KEY,
+    event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    crew_id INTEGER REFERENCES crew(id) ON DELETE SET NULL,  -- NULL when posted by office staff
+    author TEXT NOT NULL,
+    body TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS checklist_templates (
     id INTEGER PRIMARY KEY,
     name TEXT NOT NULL,
-    description TEXT
+    description TEXT,
+    crew_visible INTEGER NOT NULL DEFAULT 1       -- 0 = office-only (e.g. contract/deposit tasks)
 );
 
 CREATE TABLE IF NOT EXISTS checklist_template_items (
@@ -159,6 +180,7 @@ CREATE TABLE IF NOT EXISTS event_checklist_items (
     done INTEGER NOT NULL DEFAULT 0,
     done_by TEXT,
     done_at TEXT,
+    crew_visible INTEGER NOT NULL DEFAULT 1,      -- shown on crew worksheets
     sort INTEGER NOT NULL DEFAULT 0
 );
 

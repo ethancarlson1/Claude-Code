@@ -83,6 +83,9 @@ def fdate(value, fmt="long"):
         return f"{d:%b} {d.day}, {d.year}"
     if fmt == "iso":
         return d.isoformat()
+    if fmt == "ordinal":  # "Sat Nov 7th 2026", as on a band worksheet
+        suffix = "th" if 11 <= d.day % 100 <= 13 else {1: "st", 2: "nd", 3: "rd"}.get(d.day % 10, "th")
+        return f"{d:%a} {d:%b} {d.day}{suffix} {d.year}"
     return f"{d:%a}, {d:%b} {d.day}, {d.year}"
 
 
@@ -124,10 +127,10 @@ def _slug_words(text):
 
 
 def gen_reference(event_date, client_name=None, title=None):
-    """Build a human-readable event reference like 2026-11-07-Lange-Daniel-TJ1R."""
+    """Build a human-readable event reference like 2026-11-07-Alvarez-Sofia-TJ1R."""
     words = _slug_words(client_name)
     if len(words) == 2:
-        words = [words[1], words[0]]  # "Daniel Lange" -> "Lange-Daniel"
+        words = [words[1], words[0]]  # "Sofia Alvarez" -> "Alvarez-Sofia"
     if not words:
         words = _slug_words(title)[:3]
     name_part = "-".join(w.capitalize() if w.islower() else w for w in words)[:32].strip("-")
@@ -164,6 +167,11 @@ def mailto(to, subject, body):
     return f"mailto:{quote(to or '')}?subject={quote(subject)}&body={quote(body)}"
 
 
+def maps_url(*parts):
+    query = ", ".join(p for p in parts if p)
+    return f"https://www.google.com/maps/search/?api=1&query={quote(query)}" if query else ""
+
+
 def status_class(status):
     return {
         "inquiry": "muted",
@@ -192,4 +200,4 @@ def init_app(app):
         fdatetime=fdatetime,
         status_class=status_class,
     )
-    app.jinja_env.globals.update(mailto=mailto, today=today)
+    app.jinja_env.globals.update(mailto=mailto, today=today, maps_url=maps_url)

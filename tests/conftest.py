@@ -25,7 +25,7 @@ def anon(app):
 @pytest.fixture
 def client(app):
     c = app.test_client()
-    resp = c.post("/setup", data={"username": "admin", "password": "password123", "company_name": "Test Audio"})
+    resp = c.post("/setup", data={"username": "admin", "password": "password123", "company_name": "Chicago Sound and Backline"})
     assert resp.status_code == 302
     return c
 

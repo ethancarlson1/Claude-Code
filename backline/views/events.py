@@ -1,13 +1,13 @@
 from datetime import date, timedelta
 
-from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template, request, url_for
+from flask import Blueprint, Response, abort, flash, g, jsonify, redirect, render_template, request, url_for
 
 from .. import db, forms, services, util
 from ..forms import Field
 
 bp = Blueprint("events", __name__)
 
-TABS = ["overview", "crew", "gear", "checklist", "documents"]
+TABS = ["overview", "crew", "gear", "checklist", "chat", "documents"]
 
 
 def client_choices():
@@ -24,33 +24,53 @@ def venue_choices():
     ]
 
 
+def crew_choices():
+    return [
+        (r["id"], r["name"] + (f" — {r['role']}" if r["role"] else ""))
+        for r in db.query("SELECT id, name, role FROM crew ORDER BY active DESC, name COLLATE NOCASE")
+    ]
+
+
 EVENT_FIELDS = [
-    Field("title", "Event title", required=True, section="Event", placeholder="e.g. Lange / Daniel Wedding"),
+    Field("title", "Event title", required=True, section="Event", placeholder="e.g. Alvarez / Reed Wedding"),
     Field("event_type", "Type", type="select", choices=util.EVENT_TYPES, section="Event"),
     Field("status", "Status", type="select", required=True, section="Event",
           choices=[(s, s.title()) for s in util.EVENT_STATUSES], default="inquiry",
           help="Hold and Confirmed events reserve gear."),
     Field("client_id", "Client", type="fk", choices=client_choices, section="Event"),
-    Field("venue_id", "Venue", type="fk", choices=venue_choices, section="Event"),
+    Field("honorees", "Couple / honorees", section="Event", placeholder="e.g. Sofia & Marcus"),
+    Field("producer_id", "Producer (event lead)", type="fk", choices=crew_choices, section="Event",
+          help="Crew's point person. Shown on worksheets with their contact info."),
+    Field("guest_count", "Number of guests", type="int", section="Event"),
     Field("performers", "Artist / performers", section="Event"),
+    Field("venue_id", "Venue", type="fk", choices=venue_choices, section="Locations"),
+    Field("venue_label", "Label", section="Locations", placeholder="e.g. Reception"),
+    Field("venue2_id", "Earlier location", type="fk", choices=venue_choices, section="Locations",
+          help="Optional, e.g. a ceremony before the reception. Listed first on worksheets."),
+    Field("venue2_label", "Label", section="Locations", placeholder="e.g. Ceremony"),
     Field("event_date", "Date", type="date", required=True, section="Schedule"),
     Field("end_date", "End date", type="date", section="Schedule", help="Multi-day events only."),
     Field("load_in_time", "Load-in", type="time", section="Schedule"),
-    Field("soundcheck_time", "Soundcheck", type="time", section="Schedule"),
+    Field("soundcheck_time", "Setup complete / soundcheck", type="time", section="Schedule"),
     Field("doors_time", "Doors", type="time", section="Schedule"),
     Field("start_time", "Show start", type="time", section="Schedule"),
     Field("end_time", "Show end", type="time", section="Schedule"),
     Field("load_out_time", "Load-out", type="time", section="Schedule"),
-    Field("on_site_contact", "Day-of contact", section="On site"),
+    Field("run_of_show", "Run of show", type="textarea", rows=14, section="Schedule",
+          help="Shown on every crew worksheet. Load-in, power, parking, locations and the minute-by-minute."),
+    Field("on_site_contact", "Day-of contact", section="On site", placeholder="Planner or venue coordinator"),
     Field("on_site_phone", "Day-of phone", type="tel", section="On site"),
-    Field("attire", "Crew attire", section="On site", placeholder="e.g. All black"),
+    Field("attire", "Dress code", section="On site", placeholder="e.g. Black suit and tie"),
+    Field("crew_meal", "Crew meal", section="On site", placeholder="e.g. Hot meal at 6:30 PM in staff dining room"),
     Field("parking", "Parking & load-in directions", type="textarea", section="On site"),
     Field("audio_notes", "Audio needs", type="textarea", section="Production",
           placeholder="PA coverage, input count, monitor mixes, wireless..."),
     Field("backline_notes", "Backline needs", type="textarea", section="Production",
           placeholder="Rider requests, drum kit specs, amp preferences..."),
     Field("power_notes", "Power", type="textarea", section="Production"),
-    Field("notes", "Internal notes", type="textarea", section="Production"),
+    Field("crew_notes", "Special requests (crew only)", type="textarea", section="Notes",
+          help="On crew worksheets. Never shown to the client."),
+    Field("notes", "Office notes", type="textarea", section="Notes", help="Only visible when signed in."),
 ]
 
 CREW_FIELDS = [
@@ -99,8 +119,9 @@ def index():
     when = request.args.get("when", "upcoming")
     where, args = [], []
     if q:
-        where.append("(e.title LIKE ? OR e.reference_number LIKE ? OR c.name LIKE ? OR v.name LIKE ? OR e.performers LIKE ?)")
-        args += [f"%{q}%"] * 5
+        where.append("(e.title LIKE ? OR e.reference_number LIKE ? OR c.name LIKE ? OR v.name LIKE ? "
+                     "OR e.performers LIKE ? OR e.honorees LIKE ?)")
+        args += [f"%{q}%"] * 6
     if status in util.EVENT_STATUSES:
         where.append("e.status = ?")
         args.append(status)
@@ -174,7 +195,8 @@ def calendar():
 @bp.route("/events/new", methods=["GET", "POST"])
 def new():
     templates = db.query("SELECT * FROM checklist_templates ORDER BY id")
-    values = {"status": "inquiry", "event_date": request.args.get("date", "")}
+    values = {"status": "inquiry", "event_date": request.args.get("date", ""),
+              "run_of_show": db.get_setting("run_of_show_template")}
     errors = {}
     if request.method == "POST":
         values, errors = forms.parse(EVENT_FIELDS, request.form)
@@ -265,8 +287,8 @@ def duplicate(event_id):
         (new_id, event_id),
     )
     conn.execute(
-        """INSERT INTO event_checklist_items (event_id, section, text, sort)
-           SELECT ?, section, text, sort FROM event_checklist_items WHERE event_id = ?""",
+        """INSERT INTO event_checklist_items (event_id, section, text, crew_visible, sort)
+           SELECT ?, section, text, crew_visible, sort FROM event_checklist_items WHERE event_id = ?""",
         (new_id, event_id),
     )
     conn.commit()
@@ -282,7 +304,6 @@ def detail(event_id):
     tab = request.args.get("tab", "overview")
     if tab not in TABS:
         tab = "overview"
-    client, venue = services.event_context(event)
     crew = db.query(
         """SELECT a.*, c.name, c.phone, c.email FROM event_crew a JOIN crew c ON c.id = a.crew_id
            WHERE a.event_id = ? ORDER BY a.call_time IS NULL, a.call_time, c.name""",
@@ -299,7 +320,9 @@ def detail(event_id):
         totals = services.invoice_totals(inv)
         invoices.append({"row": inv, "totals": totals, "status": services.invoice_status(inv, totals)})
     ctx = dict(
-        event=event, tab=tab, client=client, venue=venue, crew=crew, gear=gear,
+        **_people_and_places(event),
+        messages=event_messages(event_id),
+        event=event, tab=tab, crew=crew, gear=gear,
         availability=availability, checklist=checklist, contracts=contracts, invoices=invoices,
         shortages=[(g, availability[g["item_id"]]) for g in gear
                    if g["item_id"] in availability and availability[g["item_id"]]["short"]],
@@ -308,7 +331,6 @@ def detail(event_id):
         gear_total=services.gear_total(event),
         days=util.event_days(event),
         statuses=util.EVENT_STATUSES,
-        venue_address=services.venue_address(venue),
     )
     if tab == "crew":
         ctx["crew_fields"] = CREW_FIELDS
@@ -347,22 +369,79 @@ def worksheet(event_id):
     return render_template("public/worksheet.html", **worksheet_context(event, assignment=None), admin=True)
 
 
-def worksheet_context(event, assignment):
+BOOKING_STATUS = {
+    "inquiry": "Inquiry — not booked yet",
+    "hold": "On hold — not confirmed yet",
+    "confirmed": "Confirmed booking",
+    "completed": "Completed",
+    "cancelled": "Cancelled — do not report",
+}
+
+
+def _people_and_places(event):
     client, venue = services.event_context(event)
+    venue2 = db.query("SELECT * FROM venues WHERE id = ?", (event["venue2_id"],), one=True)
+    producer = db.query("SELECT * FROM crew WHERE id = ?", (event["producer_id"],), one=True)
+    return dict(
+        client=client, venue=venue, venue_address=services.venue_address(venue),
+        venue2=venue2, venue2_address=services.venue_address(venue2), producer=producer,
+    )
+
+
+def event_messages(event_id):
+    return db.query("SELECT * FROM event_messages WHERE event_id = ? ORDER BY created_at, id", (event_id,))
+
+
+def worksheet_context(event, assignment):
     crew = db.query(
-        """SELECT a.*, c.name, c.phone, c.email FROM event_crew a JOIN crew c ON c.id = a.crew_id
+        """SELECT a.*, c.name, c.phone, c.email, c.dietary FROM event_crew a JOIN crew c ON c.id = a.crew_id
            WHERE a.event_id = ? ORDER BY a.call_time IS NULL, a.call_time, c.name""",
         (event["id"],),
     )
     gear = services.event_gear(event["id"])
-    checklist = db.query("SELECT * FROM event_checklist_items WHERE event_id = ? ORDER BY sort, id", (event["id"],))
+    # Crew see only crew-visible checklist items; the office copy shows everything.
+    checklist = db.query(
+        "SELECT * FROM event_checklist_items WHERE event_id = ? AND (crew_visible = 1 OR ?) ORDER BY sort, id",
+        (event["id"], assignment is None),
+    )
     return dict(
-        event=event, client=client, venue=venue, venue_address=services.venue_address(venue),
-        crew=crew, assignment=assignment,
+        **_people_and_places(event),
+        event=event, crew=crew, assignment=assignment, booking_status=BOOKING_STATUS[event["status"]],
         gear_groups=_group(gear, services.gear_category), gear_label=services.gear_label,
         checklist_groups=_group(checklist, lambda c: c["section"] or "General"),
+        messages=event_messages(event["id"]),
         settings=db.get_settings(),
     )
+
+
+@bp.route("/events/<int:event_id>/event.ics")
+def ics(event_id):
+    event = get_event(event_id)
+    body = services.event_ics(
+        event, uid=f"{event['reference_number']}@backline",
+        summary=f"{event['title']}", description=url_for("events.detail", event_id=event_id, _external=True),
+    )
+    return Response(body, mimetype="text/calendar",
+                    headers={"Content-Disposition": f"attachment; filename={event['reference_number']}.ics"})
+
+
+# --- Crew chat ---------------------------------------------------------------
+
+@bp.route("/events/<int:event_id>/messages", methods=["POST"])
+def post_message(event_id):
+    get_event(event_id)
+    body = request.form.get("body", "").strip()
+    if body:
+        db.insert("event_messages", {
+            "event_id": event_id, "author": g.user["username"], "body": body[:4000], "created_at": util.now_iso(),
+        })
+    return _back(event_id, "chat", "chat-form")
+
+
+@bp.route("/events/<int:event_id>/messages/<int:message_id>/delete", methods=["POST"])
+def delete_message(event_id, message_id):
+    db.execute("DELETE FROM event_messages WHERE id = ? AND event_id = ?", (message_id, event_id))
+    return _back(event_id, "chat")
 
 
 # --- Crew assignments --------------------------------------------------------
@@ -551,6 +630,7 @@ def add_checklist_item(event_id):
         "event_id": event_id,
         "section": request.form.get("section", "").strip() or None,
         "text": text,
+        "crew_visible": 1 if request.form.get("crew_visible") else 0,
         "sort": sort,
     })
     return _back(event_id, "checklist", "checklist-add")

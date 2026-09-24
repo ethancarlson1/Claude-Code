@@ -32,9 +32,74 @@ TERMS
 By signing below, Client agrees to the terms of this agreement.
 """
 
+COMPANY_NAME = "Chicago Sound and Backline"
+# Name used before the Chicago Sound and Backline rebrand; migrated on startup.
+_OLD_DEFAULT_COMPANY_NAME = "Your Audio & Backline Co."
+
+DEFAULT_CREW_TERMS = f"""\
+By accepting this call you agree to {COMPANY_NAME}'s crew policies: arrive at your call time ready to work, \
+wear the listed attire, treat all gear and venue property with care, and report any damage or missing gear \
+to the producer before you leave the venue."""
+
+DEFAULT_CREW_PAYMENT = """\
+The pay shown is the total for this call (or your hourly rate). After the event, send your invoice or \
+confirm your hours within 7 days. If you're unhappy with the pay, talk to the producer before the event, \
+ideally with plenty of notice."""
+
+DEFAULT_WORKSHEET_NOTES = f"""\
+1. Call time
+Call time means on site and ready to work, not parking. For Loop, River North and lakefront venues, allow \
+extra time for loading-zone traffic, garage height limits and freight elevators.
+
+2. Power
+A standard band or PA setup needs 2 dedicated, non-GFCI 20A circuits close to the stage. GFCI outlets \
+trip under audio loads. If power on site doesn't match the worksheet, tell the producer before plugging in.
+
+3. Hard surfaces only
+Never set speakers, stands or backline on grass or dirt. Wet ground makes a performer holding a mic or \
+guitar the quickest path to ground, and a tripod leg sinking into soft ground can drop an 80 lb speaker. \
+Ask for staging, flooring or a patio.
+
+4. Weather
+Outdoor gear needs overhead cover. If conditions become unsafe for people or equipment, stop and call \
+the producer.
+
+5. Meals
+Crew meal details are on the worksheet. Tell the producer about dietary restrictions at least a week out.
+
+6. Gear
+Count gear against the gear list before the truck leaves the venue. Log anything damaged or missing in \
+the return notes so it can be fixed before the next show.
+
+7. Client requests
+Be friendly and helpful, but send anything that changes the scope of the show (extra inputs, more time, \
+new locations) to the producer. Early setup or overtime can change the client's bill.
+
+Questions? Call the {COMPANY_NAME} office."""
+
+DEFAULT_RUN_OF_SHOW = """\
+LOAD-IN / ACCESS:
+(When the venue opens to vendors, dock or door, elevator, push distance)
+
+POWER:
+(Circuits confirmed, location, distance to stage)
+
+PARKING:
+(Where the truck and crew park, loading zone rules, permits)
+
+LOCATIONS:
+(Each performance area: ceremony, cocktail hour, reception, etc.)
+
+RUN OF SHOW:
+- 0:00 PM  Setup complete / line check
+- 0:00 PM  Doors / guests arrive
+- 0:00 PM  Show starts
+- 0:00 PM  Show ends, strike
+"""
+
 DEFAULT_SETTINGS = {
-    "company_name": "Your Audio & Backline Co.",
-    "company_address": "",
+    "company_name": COMPANY_NAME,
+    "company_address": "Chicago, IL",
     "company_phone": "",
     "company_email": "",
     "default_tax_rate": "0",
@@ -43,12 +108,37 @@ DEFAULT_SETTINGS = {
     "contract_prefix": "CT-",
     "invoice_terms": "Payment due within 15 days. Late balances are subject to a 1.5% monthly fee.",
     "contract_template": DEFAULT_CONTRACT_TEMPLATE,
+    "crew_terms": DEFAULT_CREW_TERMS,
+    "crew_payment_terms": DEFAULT_CREW_PAYMENT,
+    "worksheet_notes": DEFAULT_WORKSHEET_NOTES,
+    "run_of_show_template": DEFAULT_RUN_OF_SHOW,
+}
+
+# Columns added after the first release. init_db adds any that an existing
+# database is missing, so upgrading only needs a restart.
+MIGRATIONS = {
+    "events": [
+        ("producer_id", "INTEGER REFERENCES crew(id) ON DELETE SET NULL"),
+        ("honorees", "TEXT"),
+        ("guest_count", "INTEGER"),
+        ("venue_label", "TEXT"),
+        ("venue2_id", "INTEGER REFERENCES venues(id) ON DELETE SET NULL"),
+        ("venue2_label", "TEXT"),
+        ("crew_meal", "TEXT"),
+        ("run_of_show", "TEXT"),
+        ("crew_notes", "TEXT"),
+    ],
+    "crew": [("dietary", "TEXT")],
+    "checklist_templates": [("crew_visible", "INTEGER NOT NULL DEFAULT 1")],
+    "event_checklist_items": [("crew_visible", "INTEGER NOT NULL DEFAULT 1")],
 }
 
 DEFAULT_CHECKLISTS = [
+    # (name, description, shown on crew worksheets, items)
     (
         "Advance & Prep",
-        "Everything to confirm and prepare before the show date.",
+        "Office tasks to confirm and prepare before the show date.",
+        False,
         [
             ("Advance", "Confirm date, times and scope with client"),
             ("Advance", "Receive stage plot and input list"),
@@ -68,6 +158,7 @@ DEFAULT_CHECKLISTS = [
     (
         "Show Day",
         "Load-in, soundcheck and show.",
+        True,
         [
             ("Load-in", "Crew arrives at call time"),
             ("Load-in", "Walk stage with venue / stage manager"),
@@ -83,6 +174,7 @@ DEFAULT_CHECKLISTS = [
     (
         "Load-Out & Return",
         "Strike, return and close out.",
+        True,
         [
             ("Load-out", "Strike stage and coil cables"),
             ("Load-out", "Count gear against gear list before the truck leaves"),
@@ -165,17 +257,42 @@ def set_setting(key, value):
     )
 
 
+def _migrate(conn):
+    added = set()
+    for table, columns in MIGRATIONS.items():
+        existing = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+        for name, decl in columns:
+            if name not in existing:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
+                added.add((table, name))
+    if ("checklist_templates", "crew_visible") in added:
+        office_only = [name for name, _desc, crew_visible, _items in DEFAULT_CHECKLISTS if not crew_visible]
+        conn.executemany("UPDATE checklist_templates SET crew_visible = 0 WHERE name = ?", [(n,) for n in office_only])
+    if ("event_checklist_items", "crew_visible") in added:
+        # Items already copied from an office-only template stay off worksheets.
+        conn.execute(
+            """UPDATE event_checklist_items SET crew_visible = 0 WHERE text IN (
+                 SELECT i.text FROM checklist_template_items i
+                 JOIN checklist_templates t ON t.id = i.template_id WHERE t.crew_visible = 0)"""
+        )
+    conn.execute(
+        "UPDATE settings SET value = ? WHERE key = 'company_name' AND value = ?",
+        (COMPANY_NAME, _OLD_DEFAULT_COMPANY_NAME),
+    )
+
+
 def init_db():
     conn = get_db()
     with current_app.open_resource("schema.sql") as fh:
         conn.executescript(fh.read().decode("utf8"))
+    _migrate(conn)
     for key, value in DEFAULT_SETTINGS.items():
         conn.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", (key, value))
     if conn.execute("SELECT COUNT(*) FROM checklist_templates").fetchone()[0] == 0:
-        for name, description, items in DEFAULT_CHECKLISTS:
+        for name, description, crew_visible, items in DEFAULT_CHECKLISTS:
             template_id = conn.execute(
-                "INSERT INTO checklist_templates (name, description) VALUES (?, ?)",
-                (name, description),
+                "INSERT INTO checklist_templates (name, description, crew_visible) VALUES (?, ?, ?)",
+                (name, description, int(crew_visible)),
             ).lastrowid
             for sort, (section, text) in enumerate(items):
                 conn.execute(

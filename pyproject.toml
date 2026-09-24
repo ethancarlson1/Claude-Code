@@ -1,7 +1,7 @@
 [project]
-name = "backline-ops"
+name = "chicago-sound-backline"
 version = "0.1.0"
-description = "Scheduling, inventory, checklists, contracts and invoicing for an audio & backline company."
+description = "Scheduling, inventory, crew worksheets, checklists, contracts and invoicing for Chicago Sound and Backline."
 requires-python = ">=3.10"
 dependencies = ["Flask>=3.0"]
 
