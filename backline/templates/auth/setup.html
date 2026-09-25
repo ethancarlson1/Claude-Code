@@ -4,6 +4,7 @@
 {% block body_class %}auth-page{% endblock %}
 {% block shell %}
 <main class="auth-card card">
+  <div class="auth-logo"><img src="{{ logo_url }}" alt="{{ company_name }}"></div>
   <h1>Welcome</h1>
   <p class="muted">Create the first admin account. You can add more users later in Settings.</p>
   {% if error %}<div class="flash flash-bad">{{ error }}</div>{% endif %}

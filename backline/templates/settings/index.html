@@ -4,9 +4,21 @@
 {% block heading %}<h1>Settings</h1>{% endblock %}
 {% block content %}
 {% include "settings/_tabs.html" %}
-<form method="post" novalidate>
+<form method="post" novalidate enctype="multipart/form-data">
   {{ csrf() }}
   {% if errors %}<div class="flash flash-bad">Please fix the highlighted fields.</div>{% endif %}
+  <fieldset class="card" id="logo">
+    <legend>Logo</legend>
+    <div class="form-row" style="align-items:center">
+      <div class="auth-logo" style="margin:0;max-width:220px;border:1px solid var(--border)"><img src="{{ logo_url }}" alt="Current logo"></div>
+      <div class="field grow{% if errors.logo %} has-error{% endif %}">
+        <label for="logo-input">Replace logo</label>
+        <input id="logo-input" type="file" name="logo" accept=".png,.jpg,.jpeg,.gif,.webp">
+        {% if errors.logo %}<div class="error">{{ errors.logo }}</div>{% else %}<div class="help">Shown in the sidebar, on the sign-in page and on worksheets, contracts and invoices. A PNG or JPG with a white or transparent background works best.</div>{% endif %}
+        {% if custom_logo %}<label class="check" style="margin-top:.4rem"><input type="checkbox" name="reset_logo" value="1"> Go back to the built-in Chicago Sound &amp; Backline logo</label>{% endif %}
+      </div>
+    </div>
+  </fieldset>
   {{ form_sections(grouped, values, errors) }}
   <fieldset class="card" id="contract">
     <legend>Contract template</legend>

@@ -104,3 +104,44 @@ def filesize(num):
             return f"{num:.0f} {unit}" if unit == "bytes" else f"{num:.1f} {unit}"
         num /= 1024
     return f"{num} bytes"
+
+
+# --- Company logo ---------------------------------------------------------------
+
+LOGO_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp"}
+_IMAGE_SIGNATURES = (b"\x89PNG\r\n\x1a\n", b"\xff\xd8\xff", b"GIF87a", b"GIF89a")
+
+
+def _looks_like_image(head):
+    return head.startswith(_IMAGE_SIGNATURES) or (head[:4] == b"RIFF" and head[8:12] == b"WEBP")
+
+
+def save_logo(upload):
+    """Store a replacement company logo and return its stored name.
+    Only real PNG/JPG/GIF/WebP images are accepted (no SVG: it can carry scripts)."""
+    ext = extension(upload.filename or "")
+    head = upload.stream.read(16)
+    upload.stream.seek(0)
+    if ext not in LOGO_EXTENSIONS or not _looks_like_image(head):
+        raise ValueError("The logo must be a PNG, JPG, GIF or WebP image.")
+    name = f"logo-{uuid.uuid4().hex[:12]}.{ext}"
+    upload.save(os.path.join(upload_folder(), name))
+    return name
+
+
+def remove_logo(name):
+    if name:
+        path = os.path.join(current_app.config["UPLOAD_FOLDER"], name)
+        if os.path.exists(path):
+            os.remove(path)
+
+
+def send_logo():
+    """The uploaded logo if there is one, else the built-in Chicago Sound and Backline logo."""
+    name = db.get_setting("logo_file")
+    if name and os.path.exists(os.path.join(current_app.config["UPLOAD_FOLDER"], name)):
+        response = send_from_directory(current_app.config["UPLOAD_FOLDER"], name, max_age=86400)
+    else:
+        response = send_from_directory(current_app.static_folder, "brand/logo.png", max_age=86400)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response

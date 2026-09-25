@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="csrf-token" content="{{ csrf_token() }}">
   <title>{% block title %}{% endblock %}{% if self.title() %} · {% endif %}{{ company_name }}</title>
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='brand/favicon.png') }}">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='brand/apple-touch-icon.png') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body class="{% block body_class %}app{% endblock %}">
@@ -12,10 +14,7 @@
 <div class="layout">
   <nav class="sidebar" id="sidebar">
     <a class="brand" href="{{ url_for('dashboard.index') }}">
-      <span class="brand-mark" aria-hidden="true">
-        <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M12 1 14.3 8 21.5 6.5 16.6 12 21.5 17.5 14.3 16 12 23 9.7 16 2.5 17.5 7.4 12 2.5 6.5 9.7 8Z"/></svg>
-      </span>
-      <span class="brand-name">{{ company_name }}</span>
+      <span class="brand-logo"><img src="{{ logo_url }}" alt="{{ company_name }}"></span>
     </a>
     {% set ep = request.endpoint or '' %}
     <ul class="nav">

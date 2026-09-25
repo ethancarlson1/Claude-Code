@@ -1,7 +1,7 @@
 from flask import Blueprint, abort, flash, g, redirect, render_template, request, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from .. import db, forms, services
+from .. import db, files, forms, services
 from ..forms import Field
 
 bp = Blueprint("settings", __name__)
@@ -38,15 +38,27 @@ def index():
         for key in ("default_tax_rate", "deposit_percent"):
             if values.get(key) is not None and not 0 <= values[key] <= 100:
                 errors[key] = "Enter a percentage between 0 and 100."
+        new_logo = None
+        upload = request.files.get("logo")
+        if upload and upload.filename:
+            try:
+                new_logo = files.save_logo(upload)
+            except ValueError as exc:
+                errors["logo"] = str(exc)
         if not errors:
             for key, value in values.items():
                 if isinstance(value, float):
                     value = f"{value:g}"
                 db.set_setting(key, "" if value is None else value)
+            if new_logo or request.form.get("reset_logo"):
+                files.remove_logo(db.get_setting("logo_file"))
+                db.set_setting("logo_file", new_logo or "")
             flash("Settings saved.", "ok")
             return redirect(url_for("settings.index"))
+        files.remove_logo(new_logo)  # the form didn't save, so don't keep the upload
     return render_template("settings/index.html", values=values, errors=errors,
-                           grouped=forms.sections(COMPANY_FIELDS), merge_fields=services.MERGE_FIELDS)
+                           grouped=forms.sections(COMPANY_FIELDS), merge_fields=services.MERGE_FIELDS,
+                           custom_logo=bool(db.get_setting("logo_file")))
 
 
 # --- Checklist templates -----------------------------------------------------

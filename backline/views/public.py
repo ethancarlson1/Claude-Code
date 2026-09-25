@@ -23,6 +23,13 @@ def _assignment(reference, key):
     return row
 
 
+@bp.route("/logo")
+def logo():
+    """Public so the logo shows on the sign-in page and on crew and client pages.
+    URLs carry ?v=<file> so a new logo isn't hidden by browser caches."""
+    return files.send_logo()
+
+
 @bp.route("/worksheet/<reference>/<key>")
 def worksheet(reference, key):
     assignment = _assignment(reference, key)

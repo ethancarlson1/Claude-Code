@@ -116,4 +116,5 @@ def init_app(app):
         return {
             "company_name": db.get_setting("company_name"),
             "current_user": g.get("user"),
+            "logo_url": url_for("public.logo", v=db.get_setting("logo_file") or "default"),
         }

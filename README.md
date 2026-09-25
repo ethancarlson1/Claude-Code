@@ -118,6 +118,12 @@ Crew can accept or decline the call from the page. The office copy of the worksh
 
 Contracts, invoices and worksheets all print cleanly and can be saved as PDF from the browser. Other features: multiple users, CSRF protection, and "Email" buttons that open your mail app with the link already written in.
 
+## Branding
+
+The Chicago Sound & Backline logo appears in the sidebar, on the sign-in page, at the top of crew worksheets, and on contracts and invoices. The browser-tab and phone home-screen icons use the "csb" mark. The app's accent colors match the logo's blue.
+
+To use a different logo, upload it under **Settings → Company & billing → Logo**. It must be a PNG, JPG, GIF or WebP image; one with a white or transparent background works best. Tick "Go back to the built-in … logo" to undo. The built-in images live in `backline/static/brand/`.
+
 ## Quick start
 
 ```bash
@@ -197,6 +203,7 @@ The suite covers:
 - crew pay: amount due, owed/overdue status, batch "mark paid", CSV export, yearly totals, and what crew see
 - vehicles and transport: fleet management, company and third-party vehicles on events, double-booking and maintenance warnings, expiring paperwork, and the worksheet section
 - documents: upload, download (inline vs. attachment), rejecting unsafe or empty files, crew seeing only shared files, cleanup when files or events are deleted, and the friendly "too large" message
+- branding: the logo on every page, replacing and resetting it from Settings, and rejecting files that aren't real images
 - event types driving labels, the run-of-show starter, checklists (applied in order) and specs, plus managing types
 - worksheet sections and privacy: only the viewer's own pay, crew-only notes kept from clients, office-only checklist items hidden
 - crew chat and calendar invites
@@ -220,7 +227,7 @@ backline/
   views/             dashboard, events (crew/gear/checklists/chat/calendar), inventory,
                      people (clients/venues/crew), contracts, invoices, crewpay, settings,
                      public (crew worksheets, contract signing, client invoices)
-  templates/, static/
+  templates/, static/ (static/brand/ holds the logo and icons)
 tests/
 ```
 

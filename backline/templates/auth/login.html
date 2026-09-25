@@ -4,8 +4,9 @@
 {% block body_class %}auth-page{% endblock %}
 {% block shell %}
 <main class="auth-card card">
-  <h1>{{ company_name }}</h1>
-  <p class="muted">Sign in to manage events, gear and billing.</p>
+  <div class="auth-logo"><img src="{{ logo_url }}" alt="{{ company_name }}"></div>
+  <h1>Sign in</h1>
+  <p class="muted">Events, gear, crew and billing in one place.</p>
   {% if error %}<div class="flash flash-bad">{{ error }}</div>{% endif %}
   <form method="post">
     {{ csrf() }}

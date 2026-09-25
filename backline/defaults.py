@@ -113,6 +113,7 @@ DEFAULT_SETTINGS = {
     "contract_prefix": "CT-",
     "invoice_terms": "Payment due within 15 days. Late balances are subject to a 1.5% monthly fee.",
     "crew_pay_days": "14",
+    "logo_file": "",  # an uploaded replacement logo; empty = the built-in one
     "contract_template": DEFAULT_CONTRACT_TEMPLATE,
     "crew_terms": DEFAULT_CREW_TERMS,
     "crew_payment_terms": DEFAULT_CREW_PAYMENT,

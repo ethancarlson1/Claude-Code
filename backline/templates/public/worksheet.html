@@ -30,6 +30,7 @@
 {% block document %}
 <div class="ws">
 <header class="ws-top">
+  <img class="ws-logo" src="{{ logo_url }}" alt="{{ settings.company_name }}">
   <div class="ws-date">{{ event.event_date|fdate('ordinal') }}{% if event.end_date %} – {{ event.end_date|fdate('ordinal') }}{% endif %}</div>
   <h1>{{ event.title }}</h1>
   <div class="muted small">{{ settings.company_name }} · Ref # <span class="mono">{{ event.reference_number }}</span></div>
