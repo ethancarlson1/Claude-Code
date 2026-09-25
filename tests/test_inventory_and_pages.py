@@ -103,12 +103,15 @@ def test_every_page_renders_with_demo_data(seeded, app):
         items = [r["id"] for r in dbm.query("SELECT id FROM inventory_items")]
     pages = ["/", "/calendar", "/events?when=all", "/inventory", f"/inventory?date={date.today()}", "/inventory/import",
              "/crew", "/clients", "/venues", "/crew/1", "/clients/1", "/venues/1", "/contracts", "/contracts/new",
-             "/invoices", "/invoices/new", "/settings", "/settings/checklists", "/settings/checklists/1", "/settings/users"]
+             "/invoices", "/invoices/new", "/settings", "/settings/checklists", "/settings/checklists/1", "/settings/users",
+             "/settings/event-types", "/crew-pay", "/crew-pay?status=all", "/crew-pay?status=paid",
+             "/crew-pay?status=upcoming", "/crew-pay/export.csv"]
     for e in events:
         pages += [f"/events/{e}?tab={t}" for t in ("overview", "crew", "gear", "checklist", "chat", "documents")]
         pages += [f"/events/{e}/edit", f"/events/{e}/worksheet", f"/contracts/new?event_id={e}", f"/invoices/new?event_id={e}"]
     pages += [f"/contracts/{c}" for c in contracts] + [f"/invoices/{i}" for i in invoices]
     pages += [f"/invoices/{i}/edit" for i in invoices] + [f"/inventory/{i}" for i in items[:5]]
+    pages += [f"/crew/{c}" for c in range(1, 7)]
     failures = [(p, seeded.get(p).status_code) for p in pages if seeded.get(p).status_code != 200]
     assert failures == []
 
@@ -118,3 +121,6 @@ def test_demo_data_shows_expected_alerts(seeded):
     assert "Gear conflicts" in page and "Lakefront Harvest Festival" in page
     assert "Gear not checked back in" in page
     assert "Overdue invoices" in page
+    assert "Deposits overdue" in page and "Crew pay overdue" in page and "Sam Reyes" in page
+    crew_pay = seeded.get("/crew-pay?status=all").data.decode()
+    assert "Payroll run" in crew_pay and "overdue" in crew_pay and "upcoming" in crew_pay

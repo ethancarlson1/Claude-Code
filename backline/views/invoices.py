@@ -51,8 +51,9 @@ def invoice_bundle(invoice):
     client = db.query("SELECT * FROM clients WHERE id = ?", (invoice["client_id"],), one=True)
     event = db.query("SELECT * FROM events WHERE id = ?", (invoice["event_id"],), one=True)
     venue = db.query("SELECT * FROM venues WHERE id = ?", (event["venue_id"],), one=True) if event else None
+    contract = db.query("SELECT id, number FROM contracts WHERE id = ?", (invoice["contract_id"],), one=True)
     return dict(
-        invoice=invoice, items=items, payments=payments, totals=totals, client=client, event=event,
+        invoice=invoice, items=items, payments=payments, totals=totals, client=client, event=event, contract=contract,
         venue=venue, status=services.invoice_status(invoice, totals), settings=db.get_settings(),
     )
 

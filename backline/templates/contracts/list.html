@@ -11,15 +11,17 @@
 <div class="card">
   {% if rows %}
   <div class="table-wrap"><table>
-    <thead><tr><th>Number</th><th>Event</th><th>Client</th><th>Status</th><th class="num">Total</th><th>Signed</th></tr></thead>
+    <thead><tr><th>Number</th><th>Event</th><th>Client</th><th>Status</th><th class="num">Total</th><th>Deposit</th><th class="num">Received</th><th>Signed</th></tr></thead>
     <tbody>
-    {% for k in rows %}
+    {% for r in rows %}{% set k = r.row %}
       <tr>
         <td><a href="{{ url_for('contracts.detail', contract_id=k.id) }}"><strong>{{ k.number }}</strong></a></td>
         <td>{{ k.event_title }}<div class="small muted">{{ k.event_date|fdate }}</div></td>
         <td>{{ k.client_name or '—' }}</td>
         <td>{{ badge(k.status) }}</td>
         <td class="num">{{ k.total_amount|money }}</td>
+        <td>{% if r.deposit != 'none' %}{{ badge(r.deposit) }}<div class="small muted">{% if r.money.deposit_received_on %}{{ r.money.deposit_received_on|fdate('short') }}{% elif k.deposit_due_date %}due {{ k.deposit_due_date|fdate('short') }}{% endif %}</div>{% else %}—{% endif %}</td>
+        <td class="num">{{ r.money.paid|money }}</td>
         <td class="small">{% if k.signed_at %}{{ k.signed_name }}<div class="muted">{{ k.signed_at|fdatetime }}</div>{% elif k.sent_at %}<span class="muted">Sent {{ k.sent_at|fdatetime }}</span>{% endif %}</td>
       </tr>
     {% endfor %}

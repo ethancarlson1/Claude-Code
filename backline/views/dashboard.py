@@ -85,8 +85,23 @@ def index():
             overdue_total += totals["balance"]
             overdue.append((inv, totals))
 
+    crew_rows = services.crew_pay_rows()
+    crew_pay = services.crew_pay_summary(crew_rows)
+    crew_overdue = [r for r in crew_rows if r["pay_status"] == "overdue"]
+
+    deposits_overdue = []
+    for k in db.query(
+        """SELECT k.*, e.title AS event_title, e.event_date FROM contracts k JOIN events e ON e.id = k.event_id
+           WHERE k.status IN ('sent', 'signed') AND k.deposit_amount > 0 AND k.deposit_due_date < ?
+           AND e.status != 'cancelled' ORDER BY k.deposit_due_date""",
+        (iso,),
+    ):
+        money = services.contract_payments(k)
+        if services.deposit_status(k, money["deposit_received_on"]) == "overdue":
+            deposits_overdue.append(k)
+
     return render_template(
-        "dashboard.html",
+        "dashboard.html", crew_pay=crew_pay, crew_overdue=crew_overdue, deposits_overdue=deposits_overdue,
         upcoming=upcoming, events_30=events_30, shortages=shortages, attention=attention,
         not_returned=not_returned, unsigned=unsigned, maintenance=maintenance,
         outstanding=outstanding, overdue_total=overdue_total, overdue=overdue,

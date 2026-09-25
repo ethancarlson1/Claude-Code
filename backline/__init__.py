@@ -55,6 +55,7 @@ def create_app(test_config=None):
     from . import auth
     from .views import (
         contracts,
+        crewpay,
         dashboard,
         events,
         inventory,
@@ -65,7 +66,7 @@ def create_app(test_config=None):
     )
 
     auth.init_app(app)
-    for module in (dashboard, events, inventory, people, contracts, invoices, public, settings):
+    for module in (dashboard, events, inventory, people, contracts, invoices, crewpay, public, settings):
         app.register_blueprint(module.bp)
 
     with app.app_context():

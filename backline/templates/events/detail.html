@@ -149,7 +149,7 @@
   {% if crew %}
   <div class="table-wrap">
   <table>
-    <thead><tr><th>Name</th><th>Role</th><th>Call</th><th>Pay</th><th class="num">Rate</th><th class="num">Hours</th><th class="num">Est. pay</th><th class="check-col">Confirmed</th><th></th></tr></thead>
+    <thead><tr><th>Name</th><th>Role</th><th>Call</th><th>Pay</th><th class="num">Rate</th><th class="num">Est. hrs</th><th class="num">Amount due</th><th class="check-col">Confirmed</th><th></th></tr></thead>
     <tbody>
     {% for a in crew %}
       {% set fid = 'f-crew-' ~ a.id %}
@@ -162,7 +162,8 @@
           <option value="hourly" {% if a.pay_type == 'hourly' %}selected{% endif %}>Hourly</option></select></td>
         <td class="num"><input form="{{ fid }}" type="number" step="0.01" min="0" name="pay_rate" value="{{ '%.2f'|format(a.pay_rate) if a.pay_rate is not none else '' }}" style="width:90px" aria-label="Rate"></td>
         <td class="num"><input form="{{ fid }}" type="number" step="any" min="0" name="hours" value="{{ '%g'|format(a.hours) if a.hours is not none else '' }}" style="width:70px" aria-label="Hours"></td>
-        <td class="num">{{ ((a.pay_rate or 0) * ((a.hours or 0) if a.pay_type == 'hourly' else 1))|money }}</td>
+        {% set p = crew_pay[a.id] %}
+        <td class="num"><strong>{{ p.due|money }}</strong></td>
         <td class="check-col">
           <form class="js-toggle" method="post" action="{{ url_for('events.confirm_crew', event_id=event.id, assignment_id=a.id) }}">
             {{ csrf() }}<input class="big-check" type="checkbox" name="value" value="1" {% if a.confirmed %}checked{% endif %} aria-label="Confirmed">
@@ -181,11 +182,20 @@
       <tr class="group-row"><td colspan="9" style="text-transform:none;letter-spacing:0;font-weight:500">
         <div class="form-row"><span class="muted small">Worksheet:</span> {{ copy_link(link, 'Copy link') }}
         {% if a.email %}<a class="btn btn-small" href="{{ mailto(a.email, 'Worksheet: ' ~ event.title ~ ' — ' ~ event.event_date|fdate, 'Hi ' ~ a.name ~ ',\n\nHere is your worksheet for ' ~ event.title ~ ' on ' ~ event.event_date|fdate ~ ':\n' ~ link ~ '\n\nPlease confirm on the page.\n\nThanks!') }}">Email</a>{% endif %}</div>
+        <div class="form-row small" style="margin-top:.4rem;align-items:center">
+          <span class="muted">After the show:</span>
+          <label class="pay-status">Actual hrs <input form="{{ fid }}" type="number" step="any" min="0" name="actual_hours" value="{{ '%g'|format(a.actual_hours) if a.actual_hours is not none else '' }}" style="width:70px" aria-label="Actual hours"></label>
+          <label class="pay-status">Final $ <input form="{{ fid }}" type="number" step="0.01" min="0" name="final_amount" value="{{ '%.2f'|format(a.final_amount) if a.final_amount is not none else '' }}" placeholder="auto" style="width:90px" aria-label="Final amount" title="Leave blank to use rate × hours"></label>
+          <span class="pay-status">{{ badge(p.pay_status) }}
+            {% if a.paid_on %}{{ a.paid_on|fdate('short') }}{% if a.paid_method %} · {{ a.paid_method }}{% endif %}{% if a.paid_reference %} · {{ a.paid_reference }}{% endif %} · {{ a.paid_amount|money }}{% endif %}</span>
+        </div>
       </td></tr>
     {% endfor %}
     </tbody>
   </table>
   </div>
+  <p class="small" style="margin-top:.6rem"><a href="{{ url_for('crewpay.index', event_id=event.id) }}">Pay this crew &rarr;</a>
+    <span class="muted">Mark people paid, with date, method and check number, on the Crew pay page.</span></p>
   {% else %}
     <p class="muted">No crew assigned yet.</p>
   {% endif %}

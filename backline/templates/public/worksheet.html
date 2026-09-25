@@ -80,6 +80,11 @@
     {% if assignment and assignment.pay_rate %}
       <div><strong>Your pay: {{ assignment.pay_rate|money }}{% if assignment.pay_type == 'hourly' %}/hr{% if assignment.hours %} × {{ '%g'|format(assignment.hours) }} hrs = {{ (assignment.pay_rate * assignment.hours)|money }} est.{% endif %}{% else %} flat{% endif %}</strong></div>
     {% endif %}
+    {% if assignment and assignment.paid_on %}
+      <div><span class="stamp ok" style="font-size:.75rem">Paid</span> {{ assignment.paid_amount|money }} on {{ assignment.paid_on|fdate('short') }}{% if assignment.paid_method %} via {{ assignment.paid_method }}{% endif %}{% if assignment.paid_reference %} ({{ assignment.paid_reference }}){% endif %}</div>
+    {% elif assignment and (event.end_date or event.event_date) < today().isoformat() and event.status != 'cancelled' %}
+      <div class="muted">Payment pending.</div>
+    {% endif %}
     {% if settings.crew_payment_terms %}<div class="pre">{{ settings.crew_payment_terms }}</div>{% endif %}
   {% endcall %}
   {% call row('Event timings', 'clock') %}

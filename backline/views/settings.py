@@ -16,6 +16,8 @@ COMPANY_FIELDS = [
     Field("invoice_prefix", "Invoice number prefix", section="Billing", help="e.g. INV- gives INV-2026-0001"),
     Field("contract_prefix", "Contract number prefix", section="Billing"),
     Field("invoice_terms", "Default invoice terms", type="textarea", section="Billing"),
+    Field("crew_pay_days", "Pay crew within (days)", type="int", section="Billing",
+          help="Unpaid crew show as overdue this many days after the event."),
     Field("crew_terms", "Terms of use", type="textarea", rows=4, section="Crew worksheets",
           help="Shown to crew under Basic Info. Accepting a call means agreeing to these."),
     Field("crew_payment_terms", "Payment", type="textarea", rows=4, section="Crew worksheets",

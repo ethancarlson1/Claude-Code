@@ -145,7 +145,10 @@ def test_old_database_is_migrated(tmp_path):
     with app.app_context():
         columns = {r[1] for r in dbm.query("PRAGMA table_info(events)")}
         assert MIGRATED_COLUMNS <= columns
-        assert "dietary" in {r[1] for r in dbm.query("PRAGMA table_info(crew)")}
+        assert {"dietary", "w9_on_file"} <= {r[1] for r in dbm.query("PRAGMA table_info(crew)")}
+        assert {"actual_hours", "final_amount", "paid_on", "paid_amount", "paid_method", "paid_reference"} <= \
+            {r[1] for r in dbm.query("PRAGMA table_info(event_crew)")}
+        assert {"contract_id", "kind"} <= {r[1] for r in dbm.query("PRAGMA table_info(invoices)")}
         assert dbm.get_setting("company_name") == "Chicago Sound and Backline"
         event = dbm.query("SELECT title, event_type FROM events", one=True)
         assert (event["title"], event["event_type"]) == ("Old gig", "Live Concert")

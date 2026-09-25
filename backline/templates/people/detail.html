@@ -30,14 +30,28 @@
     </section>
     {% endif %}
     {% if kind == 'crew' %}
+    <div class="stats">
+      <a class="stat" href="{{ url_for('crewpay.index', status='owed', crew_id=row.id) }}"><div class="stat-label">Owed now</div><div class="stat-value">{{ pay.owed|money }}</div>{% if pay.overdue_count %}<div class="stat-note error">{{ pay.overdue_count }} overdue</div>{% endif %}</a>
+      <div class="stat"><div class="stat-label">Paid this year</div><div class="stat-value">{{ pay.paid_this_year|money }}</div></div>
+      <div class="stat"><div class="stat-label">Upcoming</div><div class="stat-value">{{ pay.upcoming|money }}</div><div class="stat-note">booked, estimated</div></div>
+    </div>
     <section class="card">
-      <h2>Assignments</h2>
+      <div class="card-head"><h2>Assignments &amp; pay</h2><a class="small" href="{{ url_for('crewpay.index', status='all', crew_id=row.id) }}">Open in Crew pay &rarr;</a></div>
       {% if assignments %}
-      <div class="table-wrap"><table><thead><tr><th>Date</th><th>Event</th><th>Role</th><th>Call</th><th class="num">Est. pay</th><th>Confirmed</th></tr></thead><tbody>
-      {% for a in assignments %}<tr><td class="nowrap">{{ a.event_date|fdate }}</td><td><a href="{{ url_for('events.detail', event_id=a.event_id, tab='crew') }}">{{ a.title }}</a> {{ badge(a.status) }}</td><td>{{ a.role or '' }}</td><td>{{ a.call_time|ftime }}</td>
-        <td class="num">{{ ((a.pay_rate or 0) * ((a.hours or 0) if a.pay_type == 'hourly' else 1))|money }}</td><td>{{ 'Yes' if a.confirmed else 'No' }}</td></tr>{% endfor %}
+      <div class="table-wrap"><table><thead><tr><th>Date</th><th>Event</th><th>Role</th><th class="num">Amount due</th><th>Pay status</th></tr></thead><tbody>
+      {% for a in assignments %}<tr><td class="nowrap">{{ a.event_date|fdate }}</td><td><a href="{{ url_for('events.detail', event_id=a.event_id, tab='crew') }}">{{ a.title }}</a> {% if not a.confirmed and a.pay_status == 'upcoming' %}<span class="small muted">(unconfirmed)</span>{% endif %}</td><td>{{ a.role or '' }}</td>
+        <td class="num">{{ a.due|money }}</td>
+        <td>{{ badge(a.pay_status) }}{% if a.paid_on %} <span class="small muted">{{ a.paid_on|fdate('short') }}{% if a.paid_method %} · {{ a.paid_method }}{% endif %}{% if a.paid_reference %} · {{ a.paid_reference }}{% endif %}</span>{% endif %}</td></tr>{% endfor %}
       </tbody></table></div>
       {% else %}<p class="muted">Not assigned to any events yet.</p>{% endif %}
+    </section>
+    <section class="card">
+      <h2>Paid by year</h2>
+      {% if pay.by_year %}
+      <table><tbody>{% for year, total in pay.by_year.items() %}<tr><td>{{ year }}</td><td class="num">{{ total|money }}</td></tr>{% endfor %}</tbody></table>
+      {% else %}<p class="muted">No payments recorded yet.</p>{% endif %}
+      <p class="help">Totals of recorded crew payments by the date paid, for contractor tax forms (1099-NEC).
+        {% if not row.w9_on_file %}<strong>No W-9 on file.</strong>{% endif %} Ask your accountant about filing thresholds.</p>
     </section>
     {% endif %}
   </div>

@@ -2,7 +2,7 @@
 {% from "_macros.html" import csrf, badge, delete_button, copy_link, field %}
 {% block title %}Invoice {{ invoice.number }}{% endblock %}
 {% block heading %}<h1>Invoice {{ invoice.number }} {{ badge(status) }}</h1>
-  <div class="sub">{% if client %}{{ client.name }}{% endif %}{% if event %} · <a href="{{ url_for('events.detail', event_id=event.id, tab='documents') }}">{{ event.title }}</a>{% endif %}</div>{% endblock %}
+  <div class="sub">{% if client %}{{ client.name }}{% endif %}{% if event %} · <a href="{{ url_for('events.detail', event_id=event.id, tab='documents') }}">{{ event.title }}</a>{% endif %}{% if contract %} · {{ invoice.kind|capitalize if invoice.kind else 'Invoice' }} for contract <a href="{{ url_for('contracts.detail', contract_id=contract.id) }}">{{ contract.number }}</a>{% endif %}</div>{% endblock %}
 {% block actions %}
   {% if invoice.status != 'void' %}<a class="btn" href="{{ url_for('invoices.edit', invoice_id=invoice.id) }}">Edit</a>{% endif %}
   <button class="btn" type="button" data-print>Print / PDF</button>

@@ -80,10 +80,28 @@ Crew can accept or decline the call from the page. The office copy of the worksh
 **Contracts**
 - Generated from an editable template with merge fields (client, venue, times, gear list, total, deposit, due dates). The total is pre-filled from the gear rental value.
 - Workflow: draft → sent → signed (or void). Sent contracts get a client link where the client types their name and ticks "I agree". The app records the name, time and IP address, and signed contracts are locked.
+- **Deposits and payments:** each contract has a Payments panel showing the deposit (due, received with its date, or overdue), money received so far and what remains.
+  - **Record deposit received** logs a check or transfer in one step; the deposit invoice is created behind the scenes.
+  - **Invoice the deposit** and **Invoice the balance** create invoices at the contract amounts.
+  - The contracts list shows each contract's deposit status and amount received.
 
 **Invoices**
 - Line items can be pre-filled from the event's priced gear list. Each line can be marked taxable or not. You can add a discount and a tax rate, and record payments.
-- Status is derived automatically: draft, sent, partial, paid, overdue or void. Sent invoices get a client link.
+- Record each payment received with its date, amount, method (check, ACH, card, Zelle…) and check or reference number.
+- Status is derived automatically: draft, sent, partial, paid, overdue or void. Sent invoices get a client link. The invoices list totals Outstanding, Overdue and Collected this month.
+
+**Crew pay**
+- Each crew assignment has an **amount due**: the flat rate, or the hourly rate × hours. After the show, enter actual hours or a final amount (overtime, parking, a bonus) on the event's Crew tab.
+- Crew are **owed** once their event is over. They become **overdue** if still unpaid after a set number of days (Settings → Pay crew within, default 14).
+- The **Crew pay** page:
+  - filter by status, person, event or date range
+  - tick the people you paid and **Mark paid** with the date, method and check number (one payroll run can cover many gigs)
+  - see totals for owed now, overdue, upcoming and paid this year
+  - an "owed by person" list
+  - CSV export for your bookkeeper
+- Each crew member's page shows what they're owed, their pay history, and **paid by year** totals for contractor tax forms, plus a W-9 on file flag.
+- Crew see on their worksheet when they've been paid, or that payment is pending.
+- The dashboard shows **Crew owed**, **Crew pay overdue** and **Deposits overdue**.
 
 Contracts, invoices and worksheets all print cleanly and can be saved as PDF from the browser. Other features: multiple users, CSRF protection, and "Email" buttons that open your mail app with the link already written in.
 
@@ -115,7 +133,8 @@ The demo data is dated relative to today:
 | Jamal's 40th Birthday | Private Party | Small PA + DJ, toasts, quiet hours |
 | Lakefront Harvest Festival | Festival / Outdoor | 3-day outdoor hold that conflicts with a concert over Twin Reverbs |
 | The Velvet Owls at Blue Door Lounge | Live Concert | Backline + tech on a house PA, set times with an opener |
-| Blue Door Showcase | Club / Bar Show | Past show: overdue invoice, cymbal pack never returned |
+| Northbeam Product Launch | Corporate / Speaking | Past show paid in full; two crew paid in a payroll run, one stagehand overdue |
+| Blue Door Showcase | Club / Bar Show | Past show: overdue invoice, cymbal pack never returned, one tech paid by Zelle and one still owed |
 | Lakeview Youth Arts Spring Gala | Fundraiser / Gala | Inquiry awaiting a quote |
 
 All demo people, venues, phone numbers (555-01xx) and emails are fictional.
@@ -159,7 +178,8 @@ The suite covers:
 - gear conflict rules
 - checklist and gear toggles
 - invoice math and statuses
-- the contract signing flow
+- the contract signing flow, deposits recorded against contracts, and deposit/balance invoices
+- crew pay: amount due, owed/overdue status, batch "mark paid", CSV export, yearly totals, and what crew see
 - event types driving labels, the run-of-show starter, checklists (applied in order) and specs, plus managing types
 - worksheet sections and privacy: only the viewer's own pay, crew-only notes kept from clients, office-only checklist items hidden
 - crew chat and calendar invites
@@ -180,7 +200,7 @@ backline/
   services.py        gear availability, totals, invoice math, contract rendering, iCal export
   seed.py            Chicago demo data
   views/             dashboard, events (crew/gear/checklists/chat/calendar), inventory,
-                     people (clients/venues/crew), contracts, invoices, settings,
+                     people (clients/venues/crew), contracts, invoices, crewpay, settings,
                      public (crew worksheets, contract signing, client invoices)
   templates/, static/
 tests/

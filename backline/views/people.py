@@ -60,6 +60,7 @@ KINDS = {
             Field("day_rate", "Day rate", type="money"),
             Field("hourly_rate", "Hourly rate", type="money"),
             Field("dietary", "Dietary restrictions", placeholder="For crew meal counts, e.g. vegetarian"),
+            Field("w9_on_file", "W-9 on file (for contractor tax forms)", type="checkbox", default=0),
             Field("active", "Active (available for booking)", type="checkbox", default=1),
             Field("notes", "Notes", type="textarea", placeholder="Skills, certifications, vehicle, availability..."),
         ],
@@ -127,7 +128,7 @@ def edit(kind, row_id):
 def detail(kind, row_id):
     spec = get_kind(kind)
     row = get_row(spec, row_id)
-    events, invoices, assignments = [], [], []
+    events, invoices, assignments, pay = [], [], [], None
     if kind == "clients":
         events = db.query("SELECT * FROM events WHERE client_id = ? ORDER BY event_date DESC", (row_id,))
         for inv in db.query("SELECT * FROM invoices WHERE client_id = ? ORDER BY issue_date DESC", (row_id,)):
@@ -136,14 +137,10 @@ def detail(kind, row_id):
     elif kind == "venues":
         events = db.query("SELECT * FROM events WHERE venue_id = ? ORDER BY event_date DESC", (row_id,))
     else:
-        assignments = db.query(
-            """SELECT a.*, e.title, e.event_date, e.status, e.reference_number
-               FROM event_crew a JOIN events e ON e.id = a.event_id
-               WHERE a.crew_id = ? ORDER BY e.event_date DESC""",
-            (row_id,),
-        )
+        assignments = services.crew_pay_rows("a.crew_id = ?", (row_id,))
+        pay = {**services.crew_pay_summary(assignments), "by_year": services.paid_by_year(assignments)}
     return render_template("people/detail.html", kind=kind, spec=spec, row=row, events=events,
-                           invoices=invoices, assignments=assignments)
+                           invoices=invoices, assignments=assignments, pay=pay)
 
 
 @bp.route("/<any(clients, venues, crew):kind>/<int:row_id>/delete", methods=["POST"])

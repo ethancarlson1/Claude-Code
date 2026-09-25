@@ -32,7 +32,19 @@ MIGRATIONS = {
         ("monitor_mixes", "INTEGER"),
         ("playback_feeds", "TEXT"),
     ],
-    "crew": [("dietary", "TEXT")],
+    "crew": [("dietary", "TEXT"), ("w9_on_file", "INTEGER NOT NULL DEFAULT 0")],
+    "event_crew": [
+        ("actual_hours", "REAL"),
+        ("final_amount", "REAL"),
+        ("paid_on", "TEXT"),
+        ("paid_amount", "REAL"),
+        ("paid_method", "TEXT"),
+        ("paid_reference", "TEXT"),
+    ],
+    "invoices": [
+        ("contract_id", "INTEGER REFERENCES contracts(id) ON DELETE SET NULL"),
+        ("kind", "TEXT"),
+    ],
     "checklist_templates": [("crew_visible", "INTEGER NOT NULL DEFAULT 1")],
     "event_checklist_items": [("crew_visible", "INTEGER NOT NULL DEFAULT 1")],
 }

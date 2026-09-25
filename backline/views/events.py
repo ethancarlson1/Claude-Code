@@ -120,6 +120,9 @@ CREW_FIELDS = [
     Field("pay_rate", "Rate", type="money"),
     Field("hours", "Hours", type="number"),
     Field("notes", "Notes"),
+    # Filled in after the show; drive the amount due on the Crew pay page.
+    Field("actual_hours", "Actual hours", type="number"),
+    Field("final_amount", "Final amount", type="money"),
 ]
 
 GEAR_FIELDS = [
@@ -383,6 +386,7 @@ def detail(event_id):
     )
     if tab == "crew":
         ctx["crew_fields"] = CREW_FIELDS
+        ctx["crew_pay"] = {r["id"]: r for r in services.crew_pay_rows("a.event_id = ?", (event_id,))}
         ctx["crew_options"] = db.query("SELECT * FROM crew WHERE active = 1 ORDER BY name COLLATE NOCASE")
     if tab == "gear":
         booked = services.booked_quantities(event["event_date"], util.event_end(event), event_id)

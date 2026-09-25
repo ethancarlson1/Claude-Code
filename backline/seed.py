@@ -121,14 +121,19 @@ def _crew_id(name):
     return db.scalar("SELECT id FROM crew WHERE name = ?", (name,))
 
 
-def _add_crew(event_id, name, role, call, **extra):
+def _add_crew(event_id, name, role, call, paid=None, **extra):
+    """paid = (date, method, reference) records the crew member as paid."""
     member = db.query("SELECT * FROM crew WHERE name = ?", (name,), one=True)
     pay_type = "hourly" if member["hourly_rate"] and not member["day_rate"] else "flat"
-    db.insert("event_crew", {
+    assignment_id = db.insert("event_crew", {
         "event_id": event_id, "crew_id": member["id"], "role": role, "call_time": call,
         "pay_type": pay_type, "pay_rate": member["hourly_rate"] if pay_type == "hourly" else member["day_rate"],
-        "hours": extra.get("hours"), "confirmed": extra.get("confirmed", 0), "worksheet_key": util.gen_key(),
+        "hours": extra.get("hours"), "actual_hours": extra.get("actual_hours"),
+        "confirmed": extra.get("confirmed", 0), "worksheet_key": util.gen_key(),
     })
+    if paid:
+        services.mark_crew_paid([assignment_id], *paid)
+    return assignment_id
 
 
 def _message(event_id, author, body, minutes_ago, crew=True):
@@ -150,7 +155,8 @@ def _tick(event_id, count):
         db.update("event_checklist_items", i, {"done": 1, "done_by": "office", "done_at": util.now_iso()})
 
 
-def _contract(event_id, status, deposit_pct=50):
+def _contract(event_id, status, deposit_pct=50, deposit_due=None, deposit_paid=None):
+    """deposit_paid = (date, method, reference) records the deposit as received."""
     event = db.query("SELECT * FROM events WHERE id = ?", (event_id,), one=True)
     total = services.gear_total(event)
     deposit = util.round_money(total * deposit_pct / 100)
@@ -159,14 +165,18 @@ def _contract(event_id, status, deposit_pct=50):
     body = services.render_contract(db.get_setting("contract_template"), event, number, total, deposit, None, balance_due)
     row = {"event_id": event_id, "number": number, "title": "Equipment Rental & Production Services Agreement",
            "status": status, "body": body, "total_amount": float(total), "deposit_amount": float(deposit),
-           "balance_due_date": balance_due, "public_key": util.gen_key(18)}
+           "deposit_due_date": deposit_due, "balance_due_date": balance_due, "public_key": util.gen_key(18)}
     if status in ("sent", "signed"):
         row["sent_at"] = util.now_iso()
     if status == "signed":
         client = db.query("SELECT c.name FROM clients c JOIN events e ON e.client_id = c.id WHERE e.id = ?",
                           (event_id,), one=True)
         row.update(signed_at=util.now_iso(), signed_name=client["name"], signed_ip="203.0.113.10")
-    return db.insert("contracts", row)
+    contract_id = db.insert("contracts", row)
+    if deposit_paid:
+        contract = db.query("SELECT * FROM contracts WHERE id = ?", (contract_id,), one=True)
+        services.record_contract_deposit(contract, deposit_paid[0], deposit, *deposit_paid[1:])
+    return contract_id
 
 
 def _invoice(event_id, status, issue, due, payments=()):
@@ -276,7 +286,7 @@ def seed():
 
     for name, role, email, phone, day, hourly, dietary in CREW:
         db.insert("crew", {"name": name, "role": role, "email": email, "phone": phone, "day_rate": day,
-                           "hourly_rate": hourly, "dietary": dietary})
+                           "hourly_rate": hourly, "dietary": dietary, "w9_on_file": 0 if name == "Sam Reyes" else 1})
     for name, company, email, phone in CLIENTS:
         db.insert("clients", {"name": name, "company": company, "email": email, "phone": phone})
     for v in VENUES:
@@ -315,9 +325,7 @@ def seed():
     _tick(corp, 11)
     _message(corp, "Maya Ortiz", "Brightline confirmed they want the record feed at line level on XLR. I'll bring two DI "
              "boxes in case their switcher only has unbalanced inputs.", 60 * 30)
-    _contract(corp, "signed")
-    _invoice(corp, "sent", today - timedelta(days=20), today + timedelta(days=5),
-             payments=[(today - timedelta(days=18), 800, "ACH / Bank Transfer")])
+    _contract(corp, "signed", deposit_due=day(-14), deposit_paid=(day(-18), "ACH / Bank Transfer", "NB-44120"))
 
     # 2. Dry hire: backline dropped off for a touring band's rehearsal day.
     rental = _event(title="The Midnight Arcade — rehearsal backline", event_type="Backline / Dry Hire",
@@ -335,7 +343,7 @@ def seed():
     _add_crew(rental, "Jordan Pike", "Delivery + walkthrough", "09:00", confirmed=1)
     _apply_type_checklists(rental, "Backline / Dry Hire")
     _tick(rental, 7)
-    _contract(rental, "signed")
+    _contract(rental, "signed", deposit_due=day(1), deposit_paid=(day(-3), "Zelle", None))
 
     # 3. Wedding with ceremony + reception, like a band's gig worksheet.
     wedding_date = _next_saturday(today + timedelta(days=10)).isoformat()
@@ -377,7 +385,7 @@ def seed():
              "Crew parking is the gravel lot behind the maintenance building.", 60 * 26)
     _message(wedding, "Jordan Pike", "I'll bring the spare Twin in the van in case the guitarist's amp acts up.", 60 * 20)
     _message(wedding, "Office", "Reminder: black suit and tie for this one. No sneakers.", 90, crew=False)
-    _contract(wedding, "sent")
+    _contract(wedding, "sent", deposit_due=day(-2))
     _invoice(wedding, "draft", today, util.parse_date(wedding_date) - timedelta(days=14))
 
     # 4. Private party: small PA, DJ and toasts, indoor + roof deck.
@@ -429,7 +437,25 @@ def seed():
     _apply_type_checklists(club, "Live Concert")
     _tick(club, 3)
 
-    # 7. Past show: gear partly not returned, invoice overdue.
+    # 7. Past corporate show: paid in full; one stagehand still unpaid (overdue).
+    launch = _event(title="Northbeam Product Launch", event_type="Corporate / Speaking", status="completed",
+                    client_id=client["Priya Shah"], venue_id=venue["Fulton Market Event Loft"], producer_id=producer,
+                    honorees="Product lead keynote: lav 1\nDemo team: headsets 2-3", service_type="PA + engineer",
+                    setting="Indoor", guest_count=250, input_count=10, wireless_count=4, event_date=day(-24),
+                    load_in_time="08:00", start_time="11:00", end_time="14:00", load_out_time="15:00")
+    _add_gear(launch, [("Allen & Heath SQ-6 console", 1), ("QSC K12.2 powered speaker", 2),
+                       ("Shure ULXD2 / Beta 58 handheld", 2)])
+    db.execute("UPDATE event_gear SET pulled = 1, loaded = 1, returned = 1 WHERE event_id = ?", (launch,))
+    _add_crew(launch, "Maya Ortiz", "A1 / FOH", "08:00", confirmed=1, paid=(day(-12), "ACH / Bank Transfer", "Payroll run"))
+    _add_crew(launch, "Chris Bell", "A2 / mic wrangler", "08:30", confirmed=1, paid=(day(-12), "ACH / Bank Transfer", "Payroll run"))
+    _add_crew(launch, "Sam Reyes", "Stagehand", "08:00", confirmed=1, hours=7, actual_hours=8.5)
+    launch_contract = _contract(launch, "signed", deposit_due=day(-40), deposit_paid=(day(-41), "Check", "1187"))
+    balance = services.create_contract_invoice(
+        db.query("SELECT * FROM contracts WHERE id = ?", (launch_contract,), one=True), "balance", status="sent")
+    db.insert("payments", {"invoice_id": balance, "paid_on": day(-20), "amount": float(services.invoice_totals(
+        db.query("SELECT * FROM invoices WHERE id = ?", (balance,), one=True))["total"]), "method": "ACH / Bank Transfer"})
+
+    # 8. Past show: gear partly not returned, invoice overdue.
     past = _event(title="Blue Door Showcase", event_type="Club / Bar Show", status="completed",
                   client_id=client["Ruby Carter"], venue_id=venue["Blue Door Lounge"], event_date=day(-10),
                   service_type="Backline only", load_in_time="17:00", start_time="20:00", end_time="23:00")
@@ -439,9 +465,10 @@ def seed():
     db.execute("UPDATE event_gear SET returned = 0, return_notes = 'Cymbal bag missing at load-out; venue is checking.' "
                "WHERE event_id = ? AND item_id = ?", (past, _item("Zildjian K cymbal pack")))
     _add_crew(past, "Jordan Pike", "Backline Tech", "17:00", confirmed=1)
+    _add_crew(past, "Taylor Nguyen", "Drum Tech", "17:00", confirmed=1, paid=(day(-8), "Zelle", None))
     _invoice(past, "sent", today - timedelta(days=9), today - timedelta(days=2))
 
-    # 8. Gala inquiry with no details yet.
+    # 9. Gala inquiry with no details yet.
     _event(title="Lakeview Youth Arts Spring Gala", event_type="Fundraiser / Gala", status="inquiry",
            client_id=client["Lakeview Youth Arts Fund"], event_date=day(45), guest_count=300,
            service_type="Full production (PA, backline, crew)",

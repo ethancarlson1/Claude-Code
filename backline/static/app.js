@@ -17,11 +17,33 @@
     });
   }
 
-  // Confirm destructive actions
+  // Confirm destructive actions (on the form, or on the button that submitted it)
   document.addEventListener("submit", function (e) {
-    var msg = e.target.getAttribute("data-confirm");
+    var msg = e.target.getAttribute("data-confirm") ||
+      (e.submitter && e.submitter.getAttribute("data-confirm-button"));
     if (msg && !window.confirm(msg)) e.preventDefault();
   });
+
+  // Crew pay: select all and a running total of what's selected
+  var payForm = document.querySelector("[data-pay-form]");
+  if (payForm) {
+    var boxes = payForm.querySelectorAll('input[name="ids"]');
+    var updateTotal = function () {
+      var count = 0, total = 0;
+      boxes.forEach(function (b) { if (b.checked) { count += 1; total += parseFloat(b.getAttribute("data-amount")) || 0; } });
+      var c = payForm.querySelector("[data-selected-count]");
+      var t = payForm.querySelector("[data-selected-total]");
+      if (c) c.textContent = count;
+      if (t) t.textContent = "$" + total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    };
+    payForm.addEventListener("change", function (e) {
+      if (e.target.matches("[data-check-all]")) {
+        boxes.forEach(function (b) { b.checked = e.target.checked; });
+      }
+      updateTotal();
+    });
+    updateTotal();
+  }
 
   // Copy-to-clipboard buttons
   document.addEventListener("click", function (e) {

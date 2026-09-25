@@ -319,6 +319,192 @@ def invoice_lines_for_event(event):
     return lines
 
 
+# --- Crew pay ------------------------------------------------------------------
+
+CREW_PAY_SQL = """
+    SELECT a.*, c.name AS crew_name, c.email AS crew_email, c.w9_on_file,
+           e.title, e.event_date, e.end_date, e.status AS event_status, e.reference_number
+    FROM event_crew a
+    JOIN crew c ON c.id = a.crew_id
+    JOIN events e ON e.id = a.event_id
+"""
+
+
+def crew_amount_due(a):
+    """What an assignment pays: the final amount if the office set one,
+    otherwise the flat rate, or the hourly rate × hours (actual if entered,
+    else estimated)."""
+    if a["final_amount"] is not None:
+        return util.round_money(a["final_amount"])
+    rate = util.to_decimal(a["pay_rate"])
+    if a["pay_type"] == "hourly":
+        hours = a["actual_hours"] if a["actual_hours"] is not None else a["hours"]
+        return util.round_money(rate * util.to_decimal(hours))
+    return util.round_money(rate)
+
+
+def crew_pay_status(a, today=None, pay_days=None):
+    """paid | owed | overdue | upcoming | cancelled.
+
+    Crew are owed once the event is over; "overdue" means still unpaid more
+    than `crew_pay_days` (a setting) after it ended."""
+    if a["paid_on"]:
+        return "paid"
+    if a["event_status"] == "cancelled":
+        return "cancelled"
+    today = today or util.today()
+    end = util.parse_date(a["end_date"] or a["event_date"])
+    if end >= today and a["event_status"] != "completed":
+        return "upcoming"
+    if pay_days is None:
+        pay_days = int(db.get_setting("crew_pay_days") or 14)
+    return "overdue" if (today - end).days > pay_days else "owed"
+
+
+def crew_pay_rows(where="", args=(), order="e.event_date DESC, c.name"):
+    """Assignments with crew and event details plus computed `due` and `pay_status`."""
+    pay_days = int(db.get_setting("crew_pay_days") or 14)
+    today = util.today()
+    rows = []
+    for r in db.query(f"{CREW_PAY_SQL} {('WHERE ' + where) if where else ''} ORDER BY {order}", args):
+        row = dict(r)
+        row["due"] = crew_amount_due(r)
+        row["pay_status"] = crew_pay_status(r, today, pay_days)
+        rows.append(row)
+    return rows
+
+
+def crew_pay_summary(rows):
+    """Totals over crew_pay_rows() output."""
+    zero = Decimal("0")
+    year = str(util.today().year)
+    return {
+        "owed": sum((r["due"] for r in rows if r["pay_status"] in ("owed", "overdue")), zero),
+        "overdue": sum((r["due"] for r in rows if r["pay_status"] == "overdue"), zero),
+        "overdue_count": sum(1 for r in rows if r["pay_status"] == "overdue"),
+        "upcoming": sum((r["due"] for r in rows if r["pay_status"] == "upcoming"), zero),
+        "paid_this_year": sum((util.to_decimal(r["paid_amount"]) for r in rows
+                               if r["paid_on"] and r["paid_on"].startswith(year)), zero),
+    }
+
+
+def paid_by_year(rows):
+    """{year: total paid} for a crew member, newest year first (for 1099 prep)."""
+    totals = {}
+    for r in rows:
+        if r["paid_on"]:
+            year = r["paid_on"][:4]
+            totals[year] = totals.get(year, Decimal("0")) + util.to_decimal(r["paid_amount"])
+    return dict(sorted(totals.items(), reverse=True))
+
+
+def mark_crew_paid(assignment_ids, paid_on, method=None, reference=None):
+    """Record payment for each assignment at its current amount due."""
+    rows = {r["id"]: r for r in crew_pay_rows(
+        f"a.id IN ({', '.join('?' for _ in assignment_ids)})", tuple(assignment_ids))} if assignment_ids else {}
+    conn = db.get_db()
+    for row in rows.values():
+        conn.execute(
+            "UPDATE event_crew SET paid_on = ?, paid_amount = ?, paid_method = ?, paid_reference = ? WHERE id = ?",
+            (paid_on, float(row["due"]), method, reference, row["id"]),
+        )
+    conn.commit()
+    return len(rows)
+
+
+def mark_crew_unpaid(assignment_ids):
+    if not assignment_ids:
+        return 0
+    marks = ", ".join("?" for _ in assignment_ids)
+    db.execute(
+        f"UPDATE event_crew SET paid_on = NULL, paid_amount = NULL, paid_method = NULL, paid_reference = NULL "
+        f"WHERE id IN ({marks})",
+        tuple(assignment_ids),
+    )
+    return len(assignment_ids)
+
+
+# --- Contract payments -----------------------------------------------------------
+
+def contract_payments(contract):
+    """Money received against a contract through its invoices.
+
+    Returns {"paid", "remaining", "deposit_received_on", "invoices", "payments"}.
+    The deposit counts as received on the date cumulative payments first
+    reached the deposit amount."""
+    invoices = db.query(
+        "SELECT * FROM invoices WHERE contract_id = ? AND status != 'void' ORDER BY issue_date, id", (contract["id"],)
+    )
+    payments = db.query(
+        """SELECT p.*, i.number AS invoice_number FROM payments p JOIN invoices i ON i.id = p.invoice_id
+           WHERE i.contract_id = ? AND i.status != 'void' ORDER BY p.paid_on, p.id""",
+        (contract["id"],),
+    )
+    deposit = util.round_money(contract["deposit_amount"])
+    running, received_on = Decimal("0"), None
+    for p in payments:
+        running += util.to_decimal(p["amount"])
+        if received_on is None and deposit > 0 and running >= deposit:
+            received_on = p["paid_on"]
+    total = util.round_money(contract["total_amount"])
+    return {
+        "paid": util.round_money(running),
+        "remaining": max(util.round_money(total - running), Decimal("0")),
+        "deposit_received_on": received_on,
+        "invoices": invoices,
+        "payments": payments,
+    }
+
+
+def deposit_status(contract, received_on, today=None):
+    """none | received | overdue | due"""
+    if util.to_decimal(contract["deposit_amount"]) <= 0:
+        return "none"
+    if received_on:
+        return "received"
+    due = contract["deposit_due_date"]
+    if due and util.parse_date(due) < (today or util.today()):
+        return "overdue"
+    return "due"
+
+
+def create_contract_invoice(contract, kind, status="draft"):
+    """An invoice for a contract's deposit or balance, at the contract amounts
+    (no extra tax: the signed total is what the client agreed to pay)."""
+    event = db.query("SELECT * FROM events WHERE id = ?", (contract["event_id"],), one=True)
+    deposit = util.round_money(contract["deposit_amount"])
+    if kind == "deposit":
+        amount, due = deposit, contract["deposit_due_date"] or util.today().isoformat()
+        description = f"Deposit per contract {contract['number']}: {event['title']}"
+    else:
+        amount = util.round_money(util.to_decimal(contract["total_amount"]) - deposit)
+        due = contract["balance_due_date"] or event["event_date"]
+        description = f"Balance per contract {contract['number']}: {event['title']}"
+    invoice_id = db.insert("invoices", {
+        "number": next_number("invoices", db.get_setting("invoice_prefix")),
+        "event_id": event["id"], "client_id": event["client_id"], "contract_id": contract["id"], "kind": kind,
+        "status": status, "issue_date": util.today().isoformat(), "due_date": due, "tax_rate": 0, "discount": 0,
+        "terms": db.get_setting("invoice_terms"), "public_key": util.gen_key(18),
+    })
+    db.insert("invoice_items", {"invoice_id": invoice_id, "description": description, "quantity": 1,
+                                "unit_price": float(amount), "taxable": 0, "sort": 0})
+    return invoice_id
+
+
+def record_contract_deposit(contract, paid_on, amount, method=None, reference=None):
+    """Record a deposit payment, creating the deposit invoice if needed."""
+    invoice = db.query(
+        "SELECT * FROM invoices WHERE contract_id = ? AND kind = 'deposit' AND status != 'void' ORDER BY id LIMIT 1",
+        (contract["id"],), one=True,
+    )
+    invoice_id = invoice["id"] if invoice else create_contract_invoice(contract, "deposit", status="sent")
+    if invoice and invoice["status"] == "draft":
+        db.update("invoices", invoice_id, {"status": "sent"})
+    db.insert("payments", {"invoice_id": invoice_id, "paid_on": paid_on, "amount": float(util.round_money(amount)),
+                           "method": method, "reference": reference})
+    return invoice_id
+
+
 # --- Contracts ---------------------------------------------------------------
 
 MERGE_FIELD = re.compile(r"\{\{\s*([a-z_]+)\s*\}\}")

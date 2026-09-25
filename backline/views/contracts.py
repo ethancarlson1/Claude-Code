@@ -40,13 +40,17 @@ def index():
     where, args = "", []
     if status in util.CONTRACT_STATUSES:
         where, args = "WHERE k.status = ?", [status]
-    rows = db.query(
+    rows = []
+    for k in db.query(
         f"""SELECT k.*, e.title AS event_title, e.event_date, c.name AS client_name
             FROM contracts k JOIN events e ON e.id = k.event_id
             LEFT JOIN clients c ON c.id = e.client_id
             {where} ORDER BY e.event_date DESC, k.id DESC""",
         args,
-    )
+    ):
+        money = services.contract_payments(k)
+        rows.append({"row": k, "money": money,
+                     "deposit": services.deposit_status(k, money["deposit_received_on"])})
     return render_template("contracts/list.html", rows=rows, status=status, statuses=util.CONTRACT_STATUSES)
 
 
@@ -97,8 +101,45 @@ def detail(contract_id):
     contract = get_contract(contract_id)
     event = db.query("SELECT * FROM events WHERE id = ?", (contract["event_id"],), one=True)
     client, venue = services.event_context(event)
+    money = services.contract_payments(contract)
+    kinds = {i["kind"] for i in money["invoices"]}
     return render_template("contracts/detail.html", contract=contract, event=event, client=client,
-                           settings=db.get_settings())
+                           settings=db.get_settings(), money=money, kinds=kinds,
+                           deposit_state=services.deposit_status(contract, money["deposit_received_on"]),
+                           methods=util.PAYMENT_METHODS, today=util.today().isoformat())
+
+
+@bp.route("/contracts/<int:contract_id>/deposit", methods=["POST"])
+def record_deposit(contract_id):
+    """Record a deposit payment straight from the contract (a check at signing,
+    an ACH transfer...). Creates the deposit invoice behind the scenes."""
+    contract = get_contract(contract_id)
+    if contract["status"] == "void":
+        abort(400)
+    data, errors = forms.parse([
+        Field("paid_on", "Date received", type="date", required=True),
+        Field("amount", "Amount", type="money", required=True),
+        Field("method", "Method", type="select", choices=util.PAYMENT_METHODS),
+        Field("reference", "Reference"),
+    ], request.form)
+    if not errors and data["amount"] <= 0:
+        errors["amount"] = "Amount must be more than zero."
+    if errors:
+        flash(" ".join(errors.values()), "bad")
+    else:
+        services.record_contract_deposit(contract, data["paid_on"], data["amount"], data["method"], data["reference"])
+        flash(f"Recorded {util.money(data['amount'])} received on {util.fdate(data['paid_on'], 'short')}.", "ok")
+    return redirect(url_for("contracts.detail", contract_id=contract_id))
+
+
+@bp.route("/contracts/<int:contract_id>/invoice/<any(deposit, balance):kind>", methods=["POST"])
+def create_invoice(contract_id, kind):
+    contract = get_contract(contract_id)
+    if contract["status"] == "void":
+        abort(400)
+    invoice_id = services.create_contract_invoice(contract, kind)
+    flash(f"Draft {kind} invoice created from contract {contract['number']}.", "ok")
+    return redirect(url_for("invoices.detail", invoice_id=invoice_id))
 
 
 @bp.route("/contracts/<int:contract_id>/edit", methods=["GET", "POST"])

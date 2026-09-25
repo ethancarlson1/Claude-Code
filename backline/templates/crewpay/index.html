@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf, badge, empty %}
+{% block title %}Crew pay{% endblock %}
+{% block heading %}<h1>Crew pay</h1><div class="sub">Who's owed, who's been paid, and when.</div>{% endblock %}
+{% block actions %}
+  <a class="btn" href="{{ url_for('crewpay.export_csv', **filters.to_dict()) }}">Export CSV</a>
+{% endblock %}
+{% macro pay_terms(r) -%}
+  {% if r.final_amount is not none %}Final amount set
+  {% elif r.pay_type == 'hourly' %}{{ r.pay_rate|money }}/hr × {{ '%g'|format(r.actual_hours if r.actual_hours is not none else (r.hours or 0)) }} hrs{% if r.actual_hours is none %} <span class="muted">(est.)</span>{% endif %}
+  {% else %}{{ r.pay_rate|money }} flat{% endif %}
+{%- endmacro %}
+{% block content %}
+<div class="stats">
+  <a class="stat" href="{{ url_for('crewpay.index', status='owed') }}"><div class="stat-label">Owed now</div><div class="stat-value">{{ summary.owed|money }}</div><div class="stat-note">events that are over, unpaid</div></a>
+  <a class="stat{{ ' alert' if summary.overdue_count }}" href="{{ url_for('crewpay.index', status='overdue') }}"><div class="stat-label">Overdue</div><div class="stat-value">{{ summary.overdue|money }}</div><div class="stat-note">{{ summary.overdue_count }} unpaid &gt; {{ pay_days }} days after the event</div></a>
+  <a class="stat" href="{{ url_for('crewpay.index', status='upcoming') }}"><div class="stat-label">Upcoming</div><div class="stat-value">{{ summary.upcoming|money }}</div><div class="stat-note">estimated, booked events</div></a>
+  <a class="stat" href="{{ url_for('crewpay.index', status='paid') }}"><div class="stat-label">Paid this year</div><div class="stat-value">{{ summary.paid_this_year|money }}</div></a>
+</div>
+
+<div class="split">
+  <div>
+    <form class="filters" method="get">
+      <select name="status" aria-label="Status">
+        {% for v, l in statuses %}<option value="{{ v }}" {% if v == status %}selected{% endif %}>{{ l }}</option>{% endfor %}
+      </select>
+      <select name="crew_id" aria-label="Crew member">
+        <option value="">Everyone</option>
+        {% for c in crew %}<option value="{{ c.id }}" {% if filters.get('crew_id') == c.id|string %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+      </select>
+      <select name="event_id" aria-label="Event">
+        <option value="">All events</option>
+        {% for e in events %}<option value="{{ e.id }}" {% if filters.get('event_id') == e.id|string %}selected{% endif %}>{{ e.event_date|fdate('short') }} — {{ e.title }}</option>{% endfor %}
+      </select>
+      <label class="small muted" for="start">From</label><input id="start" type="date" name="start" value="{{ filters.get('start', '') }}" style="min-width:0">
+      <label class="small muted" for="end">to</label><input id="end" type="date" name="end" value="{{ filters.get('end', '') }}" style="min-width:0">
+      <button class="btn" type="submit">Filter</button>
+    </form>
+
+    <form method="post" class="card" data-pay-form>
+      {{ csrf() }}
+      <input type="hidden" name="next" value="{{ request.full_path }}">
+      {% if rows %}
+      <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th class="check-col"><input type="checkbox" data-check-all aria-label="Select all"></th>
+          <th>Event</th><th>Crew</th><th>Pay</th><th class="num">Amount due</th><th>Status</th>
+        </tr></thead>
+        <tbody>
+        {% for r in rows %}
+          <tr>
+            <td class="check-col"><input type="checkbox" name="ids" value="{{ r.id }}" data-amount="{{ r.due }}" aria-label="Select {{ r.crew_name }}"></td>
+            <td><a href="{{ url_for('events.detail', event_id=r.event_id, tab='crew') }}">{{ r.title }}</a>
+              <div class="small muted">{{ r.event_date|fdate }}</div></td>
+            <td><a href="{{ url_for('people.detail', kind='crew', row_id=r.crew_id) }}">{{ r.crew_name }}</a>
+              <div class="small muted">{{ r.role or '' }}{% if not r.w9_on_file %} · <span title="No W-9 on file">no W-9</span>{% endif %}</div></td>
+            <td class="small">{{ pay_terms(r) }}</td>
+            <td class="num"><strong>{{ r.due|money }}</strong></td>
+            <td>{{ badge(r.pay_status) }}
+              {% if r.paid_on %}<div class="small muted">{{ r.paid_on|fdate('short') }}{% if r.paid_method %} · {{ r.paid_method }}{% endif %}{% if r.paid_reference %} · {{ r.paid_reference }}{% endif %}{% if r.paid_amount is not none and r.paid_amount|round(2) != r.due|float|round(2) %} · paid {{ r.paid_amount|money }}{% endif %}</div>{% endif %}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+        <tfoot><tr><td></td><td colspan="3" class="right">{{ rows|length }} shown</td><td class="num">{{ shown_total|money }}</td><td></td></tr></tfoot>
+      </table>
+      </div>
+
+      <div class="pay-bar">
+        <div class="small"><strong data-selected-count>0</strong> selected · <strong data-selected-total>$0.00</strong></div>
+        <div class="form-row">
+          <div class="field tiny" style="flex-basis:150px"><label for="paid_on">Paid on</label><input id="paid_on" type="date" name="paid_on" value="{{ today }}"></div>
+          <div class="field"><label for="method">Method</label><select id="method" name="method"><option value="">—</option>{% for m in methods %}<option>{{ m }}</option>{% endfor %}</select></div>
+          <div class="field"><label for="reference">Check # / reference</label><input id="reference" name="reference" placeholder="e.g. Check 1042, payroll run"></div>
+          <button class="btn btn-primary" type="submit" formaction="{{ url_for('crewpay.mark_paid') }}">Mark paid</button>
+          <button class="btn" type="submit" formaction="{{ url_for('crewpay.mark_unpaid') }}" data-confirm-button="Mark the selected payments as unpaid?">Mark unpaid</button>
+        </div>
+        <p class="help">Each person is marked paid at their amount due. To pay a different amount (overtime, parking, a bonus), set a final amount on the event's Crew tab first.</p>
+      </div>
+      {% else %}
+        {{ empty('Nothing here for these filters.') }}
+      {% endif %}
+    </form>
+  </div>
+
+  <div>
+    <section class="card">
+      <h2>Owed by person</h2>
+      {% if by_person %}
+      <table><tbody>
+        {% for crew_id, p in by_person %}
+          <tr><td><a href="{{ url_for('crewpay.index', status='owed', crew_id=crew_id) }}">{{ p.name }}</a> <span class="small muted">({{ p.count }} event{{ 's' if p.count != 1 }})</span></td><td class="num">{{ p.owed|money }}</td></tr>
+        {% endfor %}
+      </tbody></table>
+      {% else %}<p class="muted">Everyone's paid up.</p>{% endif %}
+    </section>
+    <section class="card">
+      <h2>How it works</h2>
+      <ul class="small" style="padding-left:1.1rem;margin:0">
+        <li>Crew are <strong>owed</strong> once their event is over, and <strong>overdue</strong> {{ pay_days }} days after that (change this in Settings).</li>
+        <li>Amount due = the flat rate, or hourly rate × hours. After the show, enter actual hours or a final amount on the event's Crew tab.</li>
+        <li>Tick the people you paid, then <strong>Mark paid</strong> with the date, method and check number.</li>
+        <li>Each crew member's page shows yearly totals for contractor tax forms.</li>
+      </ul>
+    </section>
+  </div>
+</div>
+{% endblock %}

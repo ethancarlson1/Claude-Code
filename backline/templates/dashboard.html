@@ -13,6 +13,7 @@
   <a class="stat" href="{{ url_for('contracts.index', status='sent') }}"><div class="stat-label">Awaiting signature</div><div class="stat-value">{{ unsigned|length }}</div><div class="stat-note">contracts sent</div></a>
   <a class="stat" href="{{ url_for('invoices.index') }}"><div class="stat-label">Outstanding</div><div class="stat-value">{{ outstanding|money }}</div><div class="stat-note">unpaid invoice balances</div></a>
   <a class="stat{{ ' alert' if overdue_total > 0 }}" href="{{ url_for('invoices.index', status='overdue') }}"><div class="stat-label">Overdue</div><div class="stat-value">{{ overdue_total|money }}</div><div class="stat-note">{{ overdue|length }} invoice{{ 's' if overdue|length != 1 }}</div></a>
+  <a class="stat{{ ' alert' if crew_pay.overdue_count }}" href="{{ url_for('crewpay.index') }}"><div class="stat-label">Crew owed</div><div class="stat-value">{{ crew_pay.owed|money }}</div><div class="stat-note">{% if crew_pay.overdue_count %}{{ crew_pay.overdue_count }} overdue{% else %}unpaid, events over{% endif %}</div></a>
 </div>
 
 <div class="split">
@@ -68,6 +69,28 @@
       <ul class="checklist">
         {% for e in not_returned %}
           <li><span class="text"><a href="{{ url_for('events.detail', event_id=e.id, tab='gear') }}">{{ e.title }}</a> — {{ e['items'] }} item{{ 's' if e['items'] != 1 }}</span><span class="meta">{{ e.event_date|fdate('short') }}</span></li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+
+    {% if deposits_overdue %}
+    <section class="card">
+      <h2>Deposits overdue</h2>
+      <ul class="checklist">
+        {% for k in deposits_overdue %}
+          <li><span class="text"><a href="{{ url_for('contracts.detail', contract_id=k.id) }}">{{ k.number }}</a> — {{ k.event_title }} · {{ k.deposit_amount|money }}</span><span class="meta">due {{ k.deposit_due_date|fdate('short') }}</span></li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+
+    {% if crew_overdue %}
+    <section class="card">
+      <h2>Crew pay overdue</h2>
+      <ul class="checklist">
+        {% for r in crew_overdue %}
+          <li><span class="text"><a href="{{ url_for('crewpay.index', status='overdue', crew_id=r.crew_id) }}">{{ r.crew_name }}</a> — {{ r.title }} · {{ r.due|money }}</span><span class="meta">{{ r.event_date|fdate('short') }}</span></li>
         {% endfor %}
       </ul>
     </section>

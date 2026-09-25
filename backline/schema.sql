@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS crew (
     day_rate REAL,
     hourly_rate REAL,
     dietary TEXT,
+    w9_on_file INTEGER NOT NULL DEFAULT 0,       -- for contractor tax forms
     notes TEXT,
     active INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -129,10 +130,16 @@ CREATE TABLE IF NOT EXISTS event_crew (
     call_time TEXT,
     pay_type TEXT NOT NULL DEFAULT 'flat',       -- flat | hourly
     pay_rate REAL,
-    hours REAL,
+    hours REAL,                                  -- estimated hours (hourly pay)
     confirmed INTEGER NOT NULL DEFAULT 0,
     notes TEXT,
-    worksheet_key TEXT NOT NULL UNIQUE
+    worksheet_key TEXT NOT NULL UNIQUE,
+    actual_hours REAL,                           -- hours worked, entered after the show
+    final_amount REAL,                           -- overrides the computed amount due
+    paid_on TEXT,                                -- set when the crew member is paid
+    paid_amount REAL,
+    paid_method TEXT,
+    paid_reference TEXT
 );
 
 -- Audio / backline needs for an event. item_id is NULL for sub-rentals or
@@ -234,6 +241,8 @@ CREATE TABLE IF NOT EXISTS invoices (
     number TEXT NOT NULL UNIQUE,
     event_id INTEGER REFERENCES events(id) ON DELETE SET NULL,
     client_id INTEGER REFERENCES clients(id) ON DELETE SET NULL,
+    contract_id INTEGER REFERENCES contracts(id) ON DELETE SET NULL,
+    kind TEXT,                                   -- 'deposit' | 'balance' for contract invoices
     status TEXT NOT NULL DEFAULT 'draft',        -- draft | sent | void (paid/partial/overdue are derived)
     issue_date TEXT NOT NULL,
     due_date TEXT,

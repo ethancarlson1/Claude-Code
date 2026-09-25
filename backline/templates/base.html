@@ -23,9 +23,10 @@
       <li><a href="{{ url_for('events.calendar') }}" class="{{ 'active' if ep == 'events.calendar' }}">Calendar</a></li>
       <li><a href="{{ url_for('events.index') }}" class="{{ 'active' if ep.startswith('events.') and ep != 'events.calendar' }}">Events</a></li>
       <li><a href="{{ url_for('inventory.index') }}" class="{{ 'active' if ep.startswith('inventory.') }}">Inventory</a></li>
-      <li class="nav-label">Documents</li>
+      <li class="nav-label">Billing &amp; pay</li>
       <li><a href="{{ url_for('contracts.index') }}" class="{{ 'active' if ep.startswith('contracts.') }}">Contracts</a></li>
       <li><a href="{{ url_for('invoices.index') }}" class="{{ 'active' if ep.startswith('invoices.') }}">Invoices</a></li>
+      <li><a href="{{ url_for('crewpay.index') }}" class="{{ 'active' if ep.startswith('crewpay.') }}">Crew pay</a></li>
       <li class="nav-label">People &amp; places</li>
       <li><a href="{{ url_for('people.index', kind='crew') }}" class="{{ 'active' if request.view_args and request.view_args.get('kind') == 'crew' }}">Crew</a></li>
       <li><a href="{{ url_for('people.index', kind='clients') }}" class="{{ 'active' if request.view_args and request.view_args.get('kind') == 'clients' }}">Clients</a></li>
