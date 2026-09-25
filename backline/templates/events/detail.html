@@ -12,8 +12,8 @@
 {% endblock %}
 {% block content %}
 <nav class="tabs">
-  {% set counts = {'crew': crew|length, 'gear': gear|length, 'checklist': checklist|length, 'chat': messages|length, 'documents': contracts|length + invoices|length} %}
-  {% for t in ['overview', 'crew', 'gear', 'checklist', 'chat', 'documents'] %}
+  {% set counts = {'crew': crew|length, 'gear': gear|length, 'transport': vehicles|length, 'checklist': checklist|length, 'chat': messages|length, 'documents': contracts|length + invoices|length + files|length} %}
+  {% for t in ['overview', 'crew', 'gear', 'transport', 'checklist', 'chat', 'documents'] %}
     <a href="{{ url_for('events.detail', event_id=event.id, tab=t) }}" class="{{ 'active' if tab == t }}">
       {{ {'gear': 'Audio & backline'}.get(t, t|title) }}{% if counts.get(t) %}<span class="count">{{ counts[t] }}</span>{% endif %}
     </a>
@@ -33,6 +33,21 @@
   {% endfor %}
   </ul>
   {% if event.status in ('inquiry',) %}<div class="small">This event is an inquiry, so its gear isn't reserved yet.</div>{% endif %}
+</div>
+{% endif %}
+
+{% if vehicle_problems and tab in ('overview', 'transport') %}
+<div class="alert-box">
+  <strong>Vehicle problem:</strong>
+  <ul>
+  {% for v in vehicles if v.id in vehicle_problems %}{% set p = vehicle_problems[v.id] %}
+    <li>{{ vehicle_label(v) }}
+      {%- if p.unavailable %} is {{ 'in maintenance' if p.unavailable == 'maintenance' else p.unavailable }}{% endif %}
+      {%- if p.conflicts %}{{ ' and' if p.unavailable }} is also booked on
+        {% for c in p.conflicts %}<a href="{{ url_for('events.detail', event_id=c.id, tab='transport') }}">{{ c.title }}</a> ({{ c.event_date|fdate('short') }}){{ ', ' if not loop.last }}{% endfor %}
+      {%- endif %}</li>
+  {% endfor %}
+  </ul>
 </div>
 {% endif %}
 
@@ -66,6 +81,7 @@
         {% if event.on_site_contact or event.on_site_phone %}<dt>Day-of contact</dt><dd>{{ event.on_site_contact or '' }} {{ event.on_site_phone or '' }}</dd>{% endif %}
         {% if event.attire %}<dt>Dress code</dt><dd>{{ event.attire }}</dd>{% endif %}
         {% if event.crew_meal %}<dt>Crew meal</dt><dd>{{ event.crew_meal }}</dd>{% endif %}
+        <dt>Transport</dt><dd>{% for v in vehicles %}<div>{{ vehicle_label(v) }}{% if v.driver_name %} <span class="small muted">· driver {{ v.driver_name }}</span>{% endif %}</div>{% else %}<a href="{{ url_for('events.detail', event_id=event.id, tab='transport') }}">No vehicle assigned</a>{% endfor %}</dd>
         {% if event.parking %}<dt>Parking / load-in</dt><dd class="pre">{{ event.parking }}</dd>{% endif %}
         {% if venue and venue.load_in_notes %}<dt>Venue load-in</dt><dd class="pre">{{ venue.load_in_notes }}</dd>{% endif %}
         {% if venue and venue.power_notes %}<dt>Venue power</dt><dd class="pre">{{ venue.power_notes }}</dd>{% endif %}
@@ -124,6 +140,7 @@
         <div><a href="{{ url_for('invoices.detail', invoice_id=i.row.id) }}">Invoice {{ i.row.number }}</a> {{ badge(i.status) }} <span class="muted small">{{ i.totals.balance|money }} due</span></div>
       {% endfor %}
       {% if not contracts and not invoices %}<p class="muted">No contract or invoice yet.</p>{% endif %}
+      <div class="small" style="margin-top:.4rem"><a href="{{ url_for('events.detail', event_id=event.id, tab='documents') }}#files">{{ files|length }} event document{{ 's' if files|length != 1 }}</a>{% if files %}: {{ files|map(attribute='category')|unique|join(', ') }}{% endif %}</div>
       <div class="form-actions">
         <a class="btn btn-small" href="{{ url_for('contracts.new', event_id=event.id) }}">+ Contract</a>
         <a class="btn btn-small" href="{{ url_for('invoices.new', event_id=event.id) }}">+ Invoice</a>
@@ -337,6 +354,91 @@
 </div>
 {% endif %}
 
+{# ----------------------------------------------------------------- TRANSPORT #}
+{% if tab == 'transport' %}
+{% macro driver_select(selected, form_id=None) %}
+  <select name="driver_id" {% if form_id %}form="{{ form_id }}"{% endif %} aria-label="Driver">
+    <option value="">— No driver yet —</option>
+    {% for c in drivers %}<option value="{{ c.id }}" {% if selected == c.id %}selected{% endif %}>{{ c.name }}{% if c.id in crew_ids %} (on this event){% endif %}</option>{% endfor %}
+  </select>
+{% endmacro %}
+<section class="card">
+  <div class="card-head"><h2>Vehicles</h2><a class="small" href="{{ url_for('people.index', kind='vehicles') }}">Manage company vehicles &rarr;</a></div>
+  {% if vehicles %}
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Vehicle</th><th>Driver</th><th>Departs shop</th><th>Notes</th><th></th></tr></thead>
+    <tbody>
+    {% for v in vehicles %}
+      {% set fid = 'f-veh-' ~ v.id %}
+      <tr class="{{ 'short' if v.id in vehicle_problems }}">
+        <td>{% if v.vehicle_id %}
+              <a href="{{ url_for('people.detail', kind='vehicles', row_id=v.vehicle_id) }}"><strong>{{ v.vehicle_name }}</strong></a>
+              <div class="small muted">{{ [v.vehicle_type, v.make_model, v.plate]|select|join(' · ') }}</div>
+              {% if v.capacity %}<div class="small muted">{{ v.capacity }}</div>{% endif %}
+            {% else %}
+              <span class="badge badge-warn">third-party</span>
+              <input form="{{ fid }}" name="description" value="{{ v.description or '' }}" aria-label="Vehicle description" style="margin-top:.3rem">
+            {% endif %}</td>
+        <td>{{ driver_select(v.driver_id, fid) }}{% if v.driver_phone %}<div class="small muted">{{ v.driver_phone }}</div>{% endif %}</td>
+        <td><input form="{{ fid }}" type="time" name="departs" value="{{ v.departs or '' }}" aria-label="Departs"></td>
+        <td><input form="{{ fid }}" name="notes" value="{{ v.notes or '' }}" placeholder="Parking, fuel, pickup…" aria-label="Notes"></td>
+        <td class="nowrap">
+          <form id="{{ fid }}" method="post" action="{{ url_for('events.update_vehicle', event_id=event.id, row_id=v.id) }}" class="inline">{{ csrf() }}<button class="btn btn-small" type="submit">Save</button></form>
+          <form method="post" action="{{ url_for('events.delete_vehicle', event_id=event.id, row_id=v.id) }}" class="inline">{{ csrf() }}<button class="btn btn-small btn-danger" type="submit" aria-label="Remove">✕</button></form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+    <p class="muted">No vehicle assigned yet. Add a company vehicle or a third-party one below.</p>
+  {% endif %}
+</section>
+
+<div class="cols">
+<section class="card">
+  <h2>Add a company vehicle</h2>
+  {% if fleet %}
+  <form method="post" action="{{ url_for('events.add_vehicle', event_id=event.id) }}">
+    {{ csrf() }}<input type="hidden" name="kind" value="company">
+    <div class="field"><label for="vehicle_id">Vehicle</label>
+      <select id="vehicle_id" name="vehicle_id" required>
+        {% for f in fleet %}{% set v = f.row %}
+          <option value="{{ v.id }}">{{ v.name }}{% if v.vehicle_type %} ({{ v.vehicle_type }}){% endif %}
+            {%- if v.status != 'active' %} — IN MAINTENANCE{% elif f.booked %} — also booked: {{ f.booked|map(attribute='title')|join(', ') }}{% else %} — free{% endif %}</option>
+        {% endfor %}
+      </select></div>
+    <div class="form-row">
+      <div class="field grow"><label>Driver</label>{{ driver_select(none) }}</div>
+      <div class="field tiny" style="flex-basis:130px"><label>Departs shop</label><input type="time" name="departs" value="{{ event.load_in_time or '' }}"></div>
+    </div>
+    <div class="field"><label>Notes</label><input name="notes" placeholder="e.g. Fuel up the night before; park on the dock"></div>
+    <div class="form-actions"><button class="btn btn-primary" type="submit">Add vehicle</button></div>
+  </form>
+  <p class="help">Availability counts Hold and Confirmed events on overlapping dates.</p>
+  {% else %}
+    <p class="muted">No company vehicles yet. <a href="{{ url_for('people.new', kind='vehicles') }}">Add your fleet</a> first.</p>
+  {% endif %}
+</section>
+<section class="card">
+  <h2>Add a third-party vehicle</h2>
+  <form method="post" action="{{ url_for('events.add_vehicle', event_id=event.id) }}">
+    {{ csrf() }}<input type="hidden" name="kind" value="third_party">
+    <div class="field"><label for="description">Description</label>
+      <input id="description" name="description" required placeholder="e.g. Penske 16' box truck rental, res #4471 / Chris's personal van"></div>
+    <div class="form-row">
+      <div class="field grow"><label>Driver</label>{{ driver_select(none) }}</div>
+      <div class="field tiny" style="flex-basis:130px"><label>Departs shop</label><input type="time" name="departs" value="{{ event.load_in_time or '' }}"></div>
+    </div>
+    <div class="field"><label>Notes</label><input name="notes" placeholder="e.g. Pick up from Penske at 7 AM, return by 10 PM"></div>
+    <div class="form-actions"><button class="btn" type="submit">Add third-party vehicle</button></div>
+  </form>
+</section>
+</div>
+{% endif %}
+
 {# ----------------------------------------------------------------- CHECKLIST #}
 {% if tab == 'checklist' %}
 <div class="split">
@@ -415,6 +517,55 @@
 
 {# ----------------------------------------------------------------- DOCUMENTS #}
 {% if tab == 'documents' %}
+<section class="card" id="files">
+  <div class="card-head"><h2>Event documents</h2><span class="muted small">Stage plots, input lists, riders, tech packs, maps: anything you'll want to find later.</span></div>
+  {% if files %}
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Document</th><th>Details</th><th class="check-col">Crew can see</th><th></th></tr></thead>
+    <tbody>
+    {% for category, rows in file_groups %}
+      <tr class="group-row"><td colspan="4">{{ category }}</td></tr>
+      {% for f in rows %}{% set fid = 'f-file-' ~ f.id %}
+      <tr>
+        <td><a href="{{ url_for('events.download_file', event_id=event.id, file_id=f.id) }}" target="_blank" rel="noopener"><strong>{{ f.original_name }}</strong></a>
+          <div class="small muted">{{ f.size|filesize }} · {{ f.uploaded_by or '' }} {{ f.uploaded_at|fdatetime }}</div></td>
+        <td>
+          <div class="form-row">
+            <div class="field"><select form="{{ fid }}" name="category" aria-label="Category">{% for c in file_categories %}<option {% if c == f.category %}selected{% endif %}>{{ c }}</option>{% endfor %}</select></div>
+            <div class="field"><input form="{{ fid }}" name="source" value="{{ f.source or '' }}" placeholder="Provided by" aria-label="Provided by"></div>
+          </div>
+          <input form="{{ fid }}" name="description" value="{{ f.description or '' }}" placeholder="Description / version notes" aria-label="Description" style="margin-top:.3rem">
+        </td>
+        <td class="check-col"><input form="{{ fid }}" class="big-check" type="checkbox" name="crew_visible" value="1" {% if f.crew_visible %}checked{% endif %} aria-label="Crew can see"></td>
+        <td class="nowrap">
+          <form id="{{ fid }}" method="post" action="{{ url_for('events.update_file', event_id=event.id, file_id=f.id) }}" class="inline">{{ csrf() }}<button class="btn btn-small" type="submit">Save</button></form>
+          <form method="post" action="{{ url_for('events.delete_file', event_id=event.id, file_id=f.id) }}" class="inline" data-confirm="Delete {{ f.original_name }}?">{{ csrf() }}<button class="btn btn-small btn-danger" type="submit" aria-label="Delete">✕</button></form>
+        </td>
+      </tr>
+      {% endfor %}
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+    <p class="muted">No documents yet.</p>
+  {% endif %}
+  <form method="post" action="{{ url_for('events.upload_files', event_id=event.id) }}" enctype="multipart/form-data" id="upload"
+        style="margin-top:1rem;border-top:1px solid var(--border);padding-top:1rem">
+    {{ csrf() }}
+    <strong>Upload</strong>
+    <div class="form-row" style="margin-top:.4rem">
+      <div class="field grow"><label for="files-input">Files</label><input id="files-input" type="file" name="files" multiple required></div>
+      <div class="field"><label for="file-category">Type</label><select id="file-category" name="category">{% for c in file_categories %}<option>{{ c }}</option>{% endfor %}</select></div>
+      <div class="field"><label for="file-source">Provided by</label><input id="file-source" name="source" placeholder="e.g. Artist management, venue"></div>
+    </div>
+    <div class="field" style="margin-top:.4rem"><label for="file-description">Description</label><input id="file-description" name="description" placeholder="e.g. Rev 3, received Oct 2"></div>
+    <label class="check" style="margin:.5rem 0"><input type="checkbox" name="crew_visible" value="1" checked> Crew can open these from their worksheets</label>
+    <div class="form-actions"><button class="btn btn-primary" type="submit">Upload</button>
+      <span class="help">PDFs, images, Word/Excel/Pages files, CSVs, Vectorworks/CAD and zip files. Up to {{ config.MAX_CONTENT_LENGTH // 1048576 }} MB per upload.</span></div>
+  </form>
+</section>
 <div class="cols">
   <section class="card">
     <div class="card-head"><h2>Contracts</h2><a class="btn btn-small btn-primary" href="{{ url_for('contracts.new', event_id=event.id) }}">+ New contract</a></div>

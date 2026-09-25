@@ -5,7 +5,7 @@ and emails are fictional placeholders."""
 
 from datetime import datetime, timedelta
 
-from . import db, services, util
+from . import db, files, services, util
 
 INVENTORY = [
     # name, category, make, model, qty, rate/day, replacement value, location
@@ -267,6 +267,80 @@ RUN OF SHOW:
 """
 
 
+VEHICLES = [
+    dict(name="Box Truck 1", vehicle_type="Box truck", make_model="2021 Isuzu NPR 16'", plate="DEMO-101",
+         capacity="16 ft box, liftgate, E-track", status="active", registration_days=120, insurance_days=200,
+         notes="11'6\" clearance: no Lower Wacker, check garage heights. Fuel card in the visor."),
+    dict(name="Sprinter Van", vehicle_type="Sprinter / high-roof van", make_model="2022 Mercedes Sprinter 2500 high roof",
+         plate="DEMO-102", capacity="Fits a 2-rack PA or a full backline", status="active", registration_days=20,
+         insurance_days=200),
+    dict(name="Cargo Van 2", vehicle_type="Cargo van", make_model="2018 Ford Transit 250", plate="DEMO-103",
+         capacity="Small PA runs, deliveries", status="maintenance", registration_days=300, insurance_days=200,
+         notes="Brake job at the shop this week."),
+    dict(name="Utility Trailer", vehicle_type="Trailer", make_model="6x12 enclosed", plate="DEMO-T1",
+         capacity="Towed by Box Truck 1", status="active", registration_days=250, insurance_days=200),
+]
+
+
+def _vehicle(event_id, name=None, driver=None, departs=None, description=None, notes=None):
+    """A company vehicle by name, or a third-party one by description."""
+    db.insert("event_vehicles", {
+        "event_id": event_id, "vehicle_id": db.scalar("SELECT id FROM vehicles WHERE name = ?", (name,)) if name else None,
+        "description": description, "driver_id": _crew_id(driver) if driver else None, "departs": departs, "notes": notes,
+        "sort": db.scalar("SELECT COUNT(*) FROM event_vehicles WHERE event_id = ?", (event_id,)),
+    })
+
+
+def _pdf(title, lines=(), boxes=()):
+    """A one-page PDF (text plus labeled boxes) standing in for real documents in the demo."""
+    def esc(text):
+        return text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+    ops = [f"BT /F1 18 Tf 50 740 Td ({esc(title)}) Tj ET"]
+    for n, line in enumerate(lines):
+        ops.append(f"BT /F1 11 Tf 50 {712 - 16 * n} Td ({esc(line)}) Tj ET")
+    for x, y, w, h, label in boxes:
+        ops += [f"{x} {y} {w} {h} re S", f"BT /F1 10 Tf {x + 6} {y + h / 2 - 4:.0f} Td ({esc(label)}) Tj ET"]
+    stream = "\n".join(ops).encode("latin-1")
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R "
+        b"/Resources << /Font << /F1 5 0 R >> >> >>",
+        b"<< /Length %d >>\nstream\n" % len(stream) + stream + b"\nendstream",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    ]
+    out, offsets = b"%PDF-1.4\n", []
+    for number, obj in enumerate(objects, start=1):
+        offsets.append(len(out))
+        out += b"%d 0 obj\n" % number + obj + b"\nendobj\n"
+    xref = len(out)
+    out += b"xref\n0 %d\n0000000000 65535 f \n" % (len(objects) + 1)
+    out += b"".join(b"%010d 00000 n \n" % off for off in offsets)
+    out += b"trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n" % (len(objects) + 1, xref)
+    return out
+
+
+STAGE_PLOT = _pdf(
+    "The Velvet Owls - Stage Plot (Rev 2)",
+    ["8-piece band. Stage 16' x 12'. Drum riser 8x8 center, 16\" high.", "Power: 2 x 20A drops stage right and left."],
+    boxes=[(250, 470, 110, 90, "Drums (riser)"), (110, 480, 90, 50, "Bass - SVT"), (410, 480, 90, 50, "Gtr 1 - Twin"),
+           (410, 400, 90, 50, "Keys - Nord 88"), (110, 400, 90, 50, "Gtr 2 - combo"), (130, 300, 100, 30, "Vox 1 + wedge"),
+           (250, 300, 110, 30, "Lead vox + wedge"), (380, 300, 100, 30, "Vox 3 + wedge"), (230, 180, 150, 40, "AUDIENCE / FOH")],
+)
+INPUT_LIST = (
+    "Ch,Source,Mic / DI,Stand,Notes\n1,Kick,Beta 52A,Short boom,\n2,Snare top,SM57,Clip,\n3,Hi-hat,KM184,Short boom,\n"
+    "4,Rack tom,e604,Clip,\n5,Floor tom,e604,Clip,\n6,OH L,KM184,Tall boom,\n7,OH R,KM184,Tall boom,\n"
+    "8,Bass DI,J48,,Post-EQ from SVT\n9,Gtr 1,SM57,Short boom,Twin Reverb\n10,Gtr 2,SM57,Short boom,\n"
+    "11,Keys L,J48,,Nord\n12,Keys R,J48,,Nord\n13,Lead vox,ULXD2/B58,Tall boom,Wireless 1\n14,Vox 2,SM58,Tall boom,\n"
+    "15,Vox 3,SM58,Tall boom,\n16,Horns,SM57,Tall boom,\n"
+).encode()
+
+
+def _doc(event_id, name, data, category, source=None, description=None, crew_visible=True):
+    files.save_event_file(event_id, name, data, category=category, source=source, description=description,
+                          crew_visible=crew_visible, uploaded_by="office")
+
+
 def seed():
     if db.scalar("SELECT COUNT(*) FROM events") or db.scalar("SELECT COUNT(*) FROM inventory_items"):
         raise SystemExit("Database already has data; demo seed skipped.")
@@ -291,10 +365,15 @@ def seed():
         db.insert("clients", {"name": name, "company": company, "email": email, "phone": phone})
     for v in VENUES:
         db.insert("venues", v)
+    today = util.today()
+    for v in VEHICLES:
+        v = dict(v)
+        v["registration_expires"] = (today + timedelta(days=v.pop("registration_days"))).isoformat()
+        v["insurance_expires"] = (today + timedelta(days=v.pop("insurance_days"))).isoformat()
+        db.insert("vehicles", v)
 
     client = {r["name"]: r["id"] for r in db.query("SELECT id, name FROM clients")}
     venue = {r["name"]: r["id"] for r in db.query("SELECT id, name FROM venues")}
-    today = util.today()
     day = lambda n: (today + timedelta(days=n)).isoformat()  # noqa: E731
     producer = _crew_id("Dana Kowalski")
 
@@ -321,6 +400,17 @@ def seed():
     _add_crew(corp, "Maya Ortiz", "A1 / FOH", "07:00", confirmed=1)
     _add_crew(corp, "Chris Bell", "A2 / mic wrangler", "08:30", confirmed=1)
     _add_crew(corp, "Sam Reyes", "Stagehand", "07:00", hours=9, confirmed=1)
+    _vehicle(corp, "Box Truck 1", driver="Sam Reyes", departs="06:15", notes="Dock on N Carpenter St until 8 AM")
+    _doc(corp, "Northbeam All-Hands agenda v3.pdf", _pdf("Northbeam Q3 All-Hands - Agenda v3", [
+        "9:30 AM  Tech check with presenters", "10:30 AM Doors", "11:00 AM Welcome (host)", "11:10 AM CEO keynote",
+        "12:00 PM Lunch", "1:00 PM  Leadership panel + Q&A", "2:45 PM  Close"]),
+        "Run of show / agenda", source="Northbeam Corporate Events", description="v3, received from Priya")
+    _doc(corp, "Fulton Market Event Loft tech pack.pdf", _pdf("Fulton Market Event Loft - Tech Pack", [
+        "Freight elevator: 8' x 10' door, 8' height, 5,000 lb.", "Power: 60A 1-phase disconnect stage left, 2 x 20A.",
+        "Dock: alley off N Carpenter St, 7 AM - 8 AM only."]), "Venue tech pack", source="Venue")
+    _doc(corp, "Certificate of insurance request.pdf", _pdf("COI Request - Northbeam Corporate Events", [
+        "Additional insured: Fulton Market Event Loft LLC"]), "Contract / paperwork", source="Northbeam Corporate Events",
+        crew_visible=False)
     _apply_type_checklists(corp, "Corporate / Speaking")
     _tick(corp, 11)
     _message(corp, "Maya Ortiz", "Brightline confirmed they want the record feed at line level on XLR. I'll bring two DI "
@@ -341,6 +431,7 @@ def seed():
                        ("Fender '65 Twin Reverb", 1), ("Ampeg SVT-CL + SVT-810E", 1), ("Nord Stage 4 88", 1),
                        ("Keyboard stand (double X)", 1)])
     _add_crew(rental, "Jordan Pike", "Delivery + walkthrough", "09:00", confirmed=1)
+    _vehicle(rental, "Sprinter Van", driver="Jordan Pike", departs="09:15", notes="Pickup day 2 at noon")
     _apply_type_checklists(rental, "Backline / Dry Hire")
     _tick(rental, 7)
     _contract(rental, "signed", deposit_due=day(1), deposit_paid=(day(-3), "Zelle", None))
@@ -379,6 +470,16 @@ def seed():
     _add_crew(wedding, "Chris Bell", "Ceremony audio, then A2", "13:30")
     _add_crew(wedding, "Jordan Pike", "Backline Tech", "14:00")
     _add_crew(wedding, "Sam Reyes", "Stagehand", "13:00", hours=10)
+    _vehicle(wedding, "Box Truck 1", driver="Sam Reyes", departs="12:15", notes="Reception gear; park behind maintenance")
+    _vehicle(wedding, description="Enterprise cargo van rental (res. E-5521)", driver="Chris Bell", departs="12:45",
+             notes="Chapel PA. Pick up at noon, return by 10 AM the next day.")
+    _doc(wedding, "Velvet Owls stage plot rev2.pdf", STAGE_PLOT, "Stage plot", source="The Velvet Owls",
+         description="Rev 2: horns moved stage right")
+    _doc(wedding, "Velvet Owls input list.csv", INPUT_LIST, "Input list", source="The Velvet Owls")
+    _doc(wedding, "Riverbend loading dock map.pdf", _pdf("Riverbend Country Club - Vendor Access", [
+        "West service door by the kitchen, no stairs.", "Vendor parking: gravel lot behind the maintenance building.",
+        "Keep the front circle clear for guests."], boxes=[(80, 420, 180, 80, "Clubhouse"), (300, 440, 120, 40,
+        "Service door (W)"), (300, 330, 180, 70, "Vendor lot")]), "Parking / load-in map", source="Riverbend Country Club")
     _apply_type_checklists(wedding, "Wedding")
     _tick(wedding, 6)
     _message(wedding, "Dana Kowalski", "Riverbend confirmed vendor access from 1:00 PM at the west service door. "
@@ -404,6 +505,8 @@ def seed():
                       ("XLR cable 25'", 8)])
     _add_gear(party, [("Deck fill speakers (pair)", 1, "sub-rent; weather covers", "Speakers")])
     _add_crew(party, "Chris Bell", "A1 / PA duty", "16:00", confirmed=1)
+    _vehicle(party, description="Chris Bell's personal cargo van", driver="Chris Bell", departs="15:15",
+             notes="Street parking only; unload on the Halsted side")
     _apply_type_checklists(party, "Private Party")
 
     # 5 + 6. Festival hold overlapping a concert -> Twin Reverb conflict.
@@ -420,6 +523,13 @@ def seed():
                      ("Drum riser 8x8", 2), ("Motion Labs 100A distro", 1)])
     _add_crew(fest, "Chris Bell", "A2 / Monitors", "08:00")
     _add_crew(fest, "Taylor Nguyen", "Drum Tech", "08:00")
+    _vehicle(fest, "Box Truck 1", driver="Chris Bell", departs="07:00")
+    _vehicle(fest, "Utility Trailer", notes="Drum risers and distro")
+    _doc(fest, "Lakefront Harvest site map.pdf", _pdf("Lakefront Harvest Festival - Site Map", [
+        "Stage 2 service drive opens 7:00 AM. Park District escort required."],
+        boxes=[(200, 480, 200, 90, "Stage 2 / Bandshell"), (240, 330, 120, 40, "FOH tent"),
+               (60, 480, 100, 60, "Generator"), (430, 480, 120, 60, "Artist tents")]),
+        "Floor plan / site map", source="Lakefront Harvest Festival")
     _apply_type_checklists(fest, "Festival / Outdoor")
 
     club = _event(title="The Velvet Owls — Blue Door Lounge", event_type="Live Concert", status="confirmed",
@@ -435,6 +545,7 @@ def seed():
                      ("Hammond XK-5 + Leslie 3300", 1)])
     _add_crew(club, "Jordan Pike", "Backline Tech", "17:00", confirmed=1)
     _apply_type_checklists(club, "Live Concert")
+    _vehicle(club, "Box Truck 1", driver="Jordan Pike", departs="16:15")  # also on the festival hold
     _tick(club, 3)
 
     # 7. Past corporate show: paid in full; one stagehand still unpaid (overdue).
@@ -449,6 +560,7 @@ def seed():
     _add_crew(launch, "Maya Ortiz", "A1 / FOH", "08:00", confirmed=1, paid=(day(-12), "ACH / Bank Transfer", "Payroll run"))
     _add_crew(launch, "Chris Bell", "A2 / mic wrangler", "08:30", confirmed=1, paid=(day(-12), "ACH / Bank Transfer", "Payroll run"))
     _add_crew(launch, "Sam Reyes", "Stagehand", "08:00", confirmed=1, hours=7, actual_hours=8.5)
+    _vehicle(launch, "Box Truck 1", driver="Sam Reyes", departs="07:15")
     launch_contract = _contract(launch, "signed", deposit_due=day(-40), deposit_paid=(day(-41), "Check", "1187"))
     balance = services.create_contract_invoice(
         db.query("SELECT * FROM contracts WHERE id = ?", (launch_contract,), one=True), "balance", status="sent")
@@ -466,6 +578,7 @@ def seed():
                "WHERE event_id = ? AND item_id = ?", (past, _item("Zildjian K cymbal pack")))
     _add_crew(past, "Jordan Pike", "Backline Tech", "17:00", confirmed=1)
     _add_crew(past, "Taylor Nguyen", "Drum Tech", "17:00", confirmed=1, paid=(day(-8), "Zelle", None))
+    _vehicle(past, "Sprinter Van", driver="Jordan Pike", departs="16:15")
     _invoice(past, "sent", today - timedelta(days=9), today - timedelta(days=2))
 
     # 9. Gala inquiry with no details yet.

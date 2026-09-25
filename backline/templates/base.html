@@ -23,6 +23,7 @@
       <li><a href="{{ url_for('events.calendar') }}" class="{{ 'active' if ep == 'events.calendar' }}">Calendar</a></li>
       <li><a href="{{ url_for('events.index') }}" class="{{ 'active' if ep.startswith('events.') and ep != 'events.calendar' }}">Events</a></li>
       <li><a href="{{ url_for('inventory.index') }}" class="{{ 'active' if ep.startswith('inventory.') }}">Inventory</a></li>
+      <li><a href="{{ url_for('people.index', kind='vehicles') }}" class="{{ 'active' if request.view_args and request.view_args.get('kind') == 'vehicles' }}">Vehicles</a></li>
       <li class="nav-label">Billing &amp; pay</li>
       <li><a href="{{ url_for('contracts.index') }}" class="{{ 'active' if ep.startswith('contracts.') }}">Contracts</a></li>
       <li><a href="{{ url_for('invoices.index') }}" class="{{ 'active' if ep.startswith('invoices.') }}">Invoices</a></li>

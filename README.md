@@ -71,6 +71,19 @@ Crew can accept or decline the call from the page. The office copy of the worksh
 - **Availability and conflicts:** Hold and Confirmed events reserve gear. If overlapping events need more units than you own, or an item is in maintenance, the shortfall is flagged and the other bookings are named.
 - **Warehouse checklist:** every gear line has Pulled / Loaded / Returned checkboxes and return/damage notes. Items still out after a show appear on the dashboard.
 
+**Vehicles and transport**
+- **Vehicles** (in the sidebar) is the company fleet. Each vehicle has a type, make/model, plate, capacity and status (active, in maintenance or retired), plus registration and insurance expiry dates. The dashboard warns 30 days before either date.
+- Each event has a **Transport** tab. Assign one or more company vehicles, or a **third-party vehicle** with a free-text description (a rental truck, a crew member's van…). Each vehicle gets a driver, a time it leaves the shop, and notes.
+- A company vehicle booked on overlapping Hold or Confirmed events, or one that's in maintenance, is flagged on the event and the dashboard. The vehicle dropdown shows which events each vehicle is already booked on.
+- Crew worksheets have a **Transport** section: which vehicle (with plate), who's driving (with phone), and when it leaves.
+- The dashboard also warns about events coming up soon that have a gear list but no vehicle. Each vehicle's page shows its upcoming trips and history.
+
+**Event documents**
+- Upload stage plots, input lists, riders, venue tech packs, parking and load-in maps, site maps, agendas, paperwork or photos on an event's **Documents** tab. You can upload several files at once.
+- Each file gets a type, a "provided by" note (artist, venue, planner…) and a description, e.g. "Rev 3, received Oct 2".
+- **Crew can see** is on by default. Shared files appear on crew worksheets, so the crew can open the stage plot from their phone. Untick it for office-only paperwork like insurance certificates.
+- Accepted file types: PDF, images, Word/Excel/PowerPoint, Pages/Numbers/Keynote, CSV/TXT/RTF, Vectorworks/DWG/DXF and zip. The limit is 50 MB per upload. PDFs and images open in the browser; other files download.
+
 **Checklists**
 - Reusable templates with sections, each marked "show on crew worksheets" or office-only. The app ships with:
   - general: Advance & Prep (office), Show Day, Load-Out & Return
@@ -127,12 +140,12 @@ The demo data is dated relative to today:
 
 | Event | Type | What it shows |
 | --- | --- | --- |
-| Northbeam Q3 All-Hands | Corporate / Speaking | Presenter mic assignments, record feed to the video team, full agenda |
+| Northbeam Q3 All-Hands | Corporate / Speaking | Presenter mic assignments, record feed to the video team, full agenda, agenda + venue tech pack uploaded |
 | The Midnight Arcade rehearsal backline | Backline / Dry Hire | Delivery and pickup, no operator |
-| Alvarez / Reed Wedding | Wedding | Ceremony + reception, run of show modeled on a band worksheet |
+| Alvarez / Reed Wedding | Wedding | Ceremony + reception, run of show modeled on a band worksheet; box truck plus a rental van; stage plot, input list and dock map uploaded |
 | Jamal's 40th Birthday | Private Party | Small PA + DJ, toasts, quiet hours |
 | Lakefront Harvest Festival | Festival / Outdoor | 3-day outdoor hold that conflicts with a concert over Twin Reverbs |
-| The Velvet Owls at Blue Door Lounge | Live Concert | Backline + tech on a house PA, set times with an opener |
+| The Velvet Owls at Blue Door Lounge | Live Concert | Backline + tech on a house PA, set times with an opener; Box Truck 1 double-booked with the festival |
 | Northbeam Product Launch | Corporate / Speaking | Past show paid in full; two crew paid in a payroll run, one stagehand overdue |
 | Blue Door Showcase | Club / Bar Show | Past show: overdue invoice, cymbal pack never returned, one tech paid by Zelle and one still owed |
 | Lakeview Youth Arts Spring Gala | Fundraiser / Gala | Inquiry awaiting a quote |
@@ -163,8 +176,10 @@ BACKLINE_SECRET_KEY=... BACKLINE_DATABASE=/srv/backline/backline.sqlite3 BACKLIN
 | `BACKLINE_SECRET_KEY` | Session signing key. If unset, one is generated and saved in `instance/secret_key`. |
 | `BACKLINE_DATABASE` | Path to the SQLite file. Default: `instance/backline.sqlite3`. |
 | `BACKLINE_BEHIND_PROXY` | Set when running behind a reverse proxy. Trusts `X-Forwarded-*` headers and marks cookies Secure. |
+| `BACKLINE_UPLOADS` | Folder for uploaded event documents. Default: `instance/uploads`. |
+| `BACKLINE_MAX_UPLOAD_MB` | Largest upload accepted at once, in MB. Default: 50. |
 
-**Backups:** all data lives in the one SQLite file. Back it up on a schedule, for example with `sqlite3 backline.sqlite3 ".backup backup.sqlite3"`.
+**Backups:** your data lives in the SQLite database file, and uploaded documents live in the `uploads` folder. Back up both on a schedule. The simplest way is to copy the whole `instance` folder, or run `sqlite3 backline.sqlite3 ".backup backup.sqlite3"` for the database.
 
 ## Tests
 
@@ -180,6 +195,8 @@ The suite covers:
 - invoice math and statuses
 - the contract signing flow, deposits recorded against contracts, and deposit/balance invoices
 - crew pay: amount due, owed/overdue status, batch "mark paid", CSV export, yearly totals, and what crew see
+- vehicles and transport: fleet management, company and third-party vehicles on events, double-booking and maintenance warnings, expiring paperwork, and the worksheet section
+- documents: upload, download (inline vs. attachment), rejecting unsafe or empty files, crew seeing only shared files, cleanup when files or events are deleted, and the friendly "too large" message
 - event types driving labels, the run-of-show starter, checklists (applied in order) and specs, plus managing types
 - worksheet sections and privacy: only the viewer's own pay, crew-only notes kept from clients, office-only checklist items hidden
 - crew chat and calendar invites
@@ -197,7 +214,8 @@ backline/
   defaults.py        default settings, contract + worksheet text, checklists, event types
   auth.py            login, first-run setup, CSRF
   forms.py           declarative form fields + validation
-  services.py        gear availability, totals, invoice math, contract rendering, iCal export
+  services.py        gear and vehicle availability, totals, invoice math, crew pay, contract rendering, iCal export
+  files.py           event document storage (uploads folder, allowed types, downloads)
   seed.py            Chicago demo data
   views/             dashboard, events (crew/gear/checklists/chat/calendar), inventory,
                      people (clients/venues/crew), contracts, invoices, crewpay, settings,

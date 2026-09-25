@@ -22,7 +22,8 @@ def index():
           (SELECT COUNT(*) FROM event_gear WHERE event_id = e.id) AS gear_total,
           (SELECT COALESCE(SUM(pulled), 0) FROM event_gear WHERE event_id = e.id) AS gear_pulled,
           (SELECT COUNT(*) FROM event_crew WHERE event_id = e.id) AS crew_total,
-          (SELECT COALESCE(SUM(confirmed), 0) FROM event_crew WHERE event_id = e.id) AS crew_confirmed
+          (SELECT COALESCE(SUM(confirmed), 0) FROM event_crew WHERE event_id = e.id) AS crew_confirmed,
+          (SELECT COUNT(*) FROM event_vehicles WHERE event_id = e.id) AS vehicle_total
         FROM events e
         LEFT JOIN clients c ON c.id = e.client_id
         LEFT JOIN venues v ON v.id = e.venue_id
@@ -51,6 +52,8 @@ def index():
             attention.append((link, "crew", f"{e['crew_total'] - e['crew_confirmed']} crew unconfirmed for {e['title']}", start))
         if e["gear_total"] == 0:
             attention.append((link, "gear", f"No gear list for {e['title']}", start))
+        elif e["vehicle_total"] == 0:
+            attention.append((link, "transport", f"No vehicle assigned for {e['title']}", start))
         elif start <= today + timedelta(days=2) and e["gear_pulled"] < e["gear_total"]:
             attention.append((link, "gear", f"{e['gear_total'] - e['gear_pulled']} items not pulled for {e['title']}", start))
         if e["check_total"] and e["check_done"] < e["check_total"] and start <= today + timedelta(days=3):
@@ -85,6 +88,14 @@ def index():
             overdue_total += totals["balance"]
             overdue.append((inv, totals))
 
+    vehicle_conflicts = services.upcoming_vehicle_conflicts(iso, (today + timedelta(days=90)).isoformat())
+    paperwork = []
+    for v in db.query("SELECT * FROM vehicles WHERE status != 'retired' ORDER BY name"):
+        for key, label in (("registration_expires", "Registration"), ("insurance_expires", "Insurance")):
+            state = services.paperwork_status(v[key], today)
+            if state:
+                paperwork.append((v, label, v[key], state))
+
     crew_rows = services.crew_pay_rows()
     crew_pay = services.crew_pay_summary(crew_rows)
     crew_overdue = [r for r in crew_rows if r["pay_status"] == "overdue"]
@@ -102,6 +113,7 @@ def index():
 
     return render_template(
         "dashboard.html", crew_pay=crew_pay, crew_overdue=crew_overdue, deposits_overdue=deposits_overdue,
+        vehicle_conflicts=vehicle_conflicts, paperwork=paperwork,
         upcoming=upcoming, events_30=events_30, shortages=shortages, attention=attention,
         not_returned=not_returned, unsigned=unsigned, maintenance=maintenance,
         outstanding=outstanding, overdue_total=overdue_total, overdue=overdue,

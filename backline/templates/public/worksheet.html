@@ -114,6 +114,23 @@
 </div>
 {% endcall %}
 
+{# -------------------------------------------------------------- TRANSPORT #}
+{% call section('Transport', 'truck') %}
+{% if vehicles %}
+<div class="ws-rows">
+  {% for v in vehicles %}
+    {% call row(v.vehicle_name if v.vehicle_id else 'Third-party vehicle', 'truck') %}
+      {% if v.vehicle_id %}<strong>{{ [v.vehicle_type, v.make_model]|select|join(' · ') or v.vehicle_name }}</strong>{% if v.plate %} · plate <span class="mono">{{ v.plate }}</span>{% endif %}{% if v.capacity %}<div class="small muted">{{ v.capacity }}</div>{% endif %}
+      {% else %}<strong>{{ v.description }}</strong>{% endif %}
+      <div>{% if v.driver_name %}Driver: {{ v.driver_name }}{% if v.driver_phone %} · <a class="nowrap" href="tel:{{ v.driver_phone }}">{{ v.driver_phone }}</a>{% endif %}{% else %}<span class="muted">Driver TBD</span>{% endif %}
+        {% if v.departs %} · departs the shop <strong>{{ v.departs|ftime }}</strong>{% endif %}</div>
+      {% if v.notes %}<div class="small">{{ v.notes }}</div>{% endif %}
+    {% endcall %}
+  {% endfor %}
+</div>
+{% else %}<p class="muted">Vehicle TBD</p>{% endif %}
+{% endcall %}
+
 {# ------------------------------------------------------------------ CREW #}
 {% call section('Crew', 'users') %}
 {% if crew %}
@@ -186,6 +203,21 @@
 </table>
 {% else %}<p class="muted">Gear list TBD</p>{% endif %}
 {% endcall %}
+
+{# -------------------------------------------------------------- DOCUMENTS #}
+{% if files %}
+{% call section('Event documents', 'file', 'documents') %}
+<div class="ws-rows">
+  {% for f in files %}
+    {% call row(f.category, 'file') %}
+      <a href="{{ url_for('public.worksheet_file', reference=event.reference_number, key=assignment.worksheet_key, file_id=f.id) if assignment else url_for('events.download_file', event_id=event.id, file_id=f.id) }}" target="_blank" rel="noopener"><strong>{{ f.original_name }}</strong></a>
+      <span class="muted small">{{ f.size|filesize }}{% if f.source %} · from {{ f.source }}{% endif %}{% if not f.crew_visible %} · office only{% endif %}</span>
+      {% if f.description %}<div class="small">{{ f.description }}</div>{% endif %}
+    {% endcall %}
+  {% endfor %}
+</div>
+{% endcall %}
+{% endif %}
 
 {# -------------------------------------------------------------- CHECKLIST #}
 {% if checklist_groups %}

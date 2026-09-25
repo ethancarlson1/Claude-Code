@@ -112,6 +112,84 @@ def upcoming_shortages(start, end):
     return out
 
 
+# --- Vehicles ------------------------------------------------------------------
+
+def event_vehicles(event_id):
+    return db.query(
+        """SELECT ev.*, v.name AS vehicle_name, v.vehicle_type, v.make_model, v.plate, v.capacity,
+                  v.status AS vehicle_status, c.name AS driver_name, c.phone AS driver_phone
+           FROM event_vehicles ev
+           LEFT JOIN vehicles v ON v.id = ev.vehicle_id
+           LEFT JOIN crew c ON c.id = ev.driver_id
+           WHERE ev.event_id = ? ORDER BY ev.sort, ev.id""",
+        (event_id,),
+    )
+
+
+def vehicle_label(row):
+    """"Box Truck 1 · DEMO-101" for company vehicles, the description for third-party ones."""
+    if row["vehicle_id"] and row["vehicle_name"]:
+        return row["vehicle_name"] + (f" · {row['plate']}" if row["plate"] else "")
+    return row["description"] or "Third-party vehicle"
+
+
+def vehicle_bookings(vehicle_id, start, end, exclude_event_id=None):
+    """Hold/confirmed events overlapping [start, end] that use a company vehicle."""
+    placeholders = ", ".join("?" for _ in util.RESERVING_STATUSES)
+    return db.query(
+        f"""SELECT DISTINCT e.id, e.title, e.event_date, e.end_date, e.status, e.reference_number
+            FROM event_vehicles ev JOIN events e ON e.id = ev.event_id
+            WHERE ev.vehicle_id = ? AND e.status IN ({placeholders})
+              AND e.event_date <= ? AND COALESCE(e.end_date, e.event_date) >= ? AND e.id != ?
+            ORDER BY e.event_date""",
+        (vehicle_id, *util.RESERVING_STATUSES, end, start, exclude_event_id or -1),
+    )
+
+
+def vehicle_problems(event):
+    """Per event_vehicles row: other bookings of the same company vehicle on
+    overlapping dates, and whether the vehicle is out of service."""
+    start, end = event["event_date"], util.event_end(event)
+    problems = {}
+    for row in event_vehicles(event["id"]):
+        if not row["vehicle_id"]:
+            continue
+        conflicts = vehicle_bookings(row["vehicle_id"], start, end, event["id"])
+        unavailable = row["vehicle_status"] if row["vehicle_status"] != "active" else None
+        if conflicts or unavailable:
+            problems[row["id"]] = {"conflicts": conflicts, "unavailable": unavailable}
+    return problems
+
+
+def upcoming_vehicle_conflicts(start, end):
+    """Hold/confirmed events in a window whose company vehicles are double-booked
+    or out of service. Returns [(event, [vehicle labels])]."""
+    placeholders = ", ".join("?" for _ in util.RESERVING_STATUSES)
+    out = []
+    for e in db.query(
+        f"""SELECT * FROM events WHERE status IN ({placeholders})
+            AND COALESCE(end_date, event_date) >= ? AND event_date <= ?
+            AND EXISTS (SELECT 1 FROM event_vehicles WHERE event_id = events.id AND vehicle_id IS NOT NULL)
+            ORDER BY event_date""",
+        (*util.RESERVING_STATUSES, start, end),
+    ):
+        problems = vehicle_problems(e)
+        if problems:
+            labels = [vehicle_label(r) for r in event_vehicles(e["id"]) if r["id"] in problems]
+            out.append((e, labels))
+    return out
+
+
+def paperwork_status(expires, today=None, warn_days=30):
+    """None, "expiring" (within warn_days) or "expired" for a registration or insurance date."""
+    if not expires:
+        return None
+    days = (util.parse_date(expires) - (today or util.today())).days
+    if days < 0:
+        return "expired"
+    return "expiring" if days <= warn_days else None
+
+
 # --- Gear list ---------------------------------------------------------------
 
 def event_gear(event_id):

@@ -1,8 +1,9 @@
-"""Clients, venues and crew share one set of list/detail/form views."""
+"""Clients, venues, crew and company vehicles share one set of list/detail/form views."""
 
 from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
 
-from .. import db, forms, services
+from .. import db, forms, services, util
+from ..defaults import VEHICLE_TYPES
 from ..forms import Field
 
 bp = Blueprint("people", __name__)
@@ -65,7 +66,32 @@ KINDS = {
             Field("notes", "Notes", type="textarea", placeholder="Skills, certifications, vehicle, availability..."),
         ],
     },
+    "vehicles": {
+        "table": "vehicles",
+        "title": "Vehicles",
+        "singular": "vehicle",
+        "search": ["name", "vehicle_type", "make_model", "plate"],
+        "columns": [("name", "Name"), ("vehicle_type", "Type"), ("make_model", "Make / model"), ("plate", "Plate"),
+                    ("capacity", "Capacity"), ("status", "Status")],
+        "fields": [
+            Field("name", "Name", required=True, section="Vehicle", placeholder="e.g. Box Truck 1"),
+            Field("vehicle_type", "Type", type="select", choices=VEHICLE_TYPES, section="Vehicle"),
+            Field("make_model", "Make / model / year", section="Vehicle", placeholder="e.g. 2021 Isuzu NPR 16'"),
+            Field("plate", "License plate", section="Vehicle"),
+            Field("capacity", "Capacity / features", section="Vehicle", placeholder="e.g. 16 ft box, liftgate, E-track"),
+            Field("status", "Status", type="select", required=True, default="active", section="Vehicle",
+                  choices=[("active", "Active"), ("maintenance", "In maintenance"), ("retired", "Retired")],
+                  help="Vehicles in maintenance or retired are flagged if booked."),
+            Field("registration_expires", "Registration expires", type="date", section="Paperwork"),
+            Field("insurance_expires", "Insurance expires", type="date", section="Paperwork",
+                  help="The dashboard warns 30 days before either date."),
+            Field("notes", "Notes", type="textarea", section="Paperwork",
+                  placeholder="Height clearance, fuel card, where the keys live, service schedule…"),
+        ],
+    },
 }
+
+KIND_ROUTE = "<any(clients, venues, crew, vehicles):kind>"
 
 
 def get_kind(kind):
@@ -82,7 +108,7 @@ def get_row(spec, row_id):
     return row
 
 
-@bp.route("/<any(clients, venues, crew):kind>")
+@bp.route(f"/{KIND_ROUTE}")
 def index(kind):
     spec = get_kind(kind)
     q = request.args.get("q", "").strip()
@@ -90,12 +116,13 @@ def index(kind):
     if q:
         where = "WHERE " + " OR ".join(f"{c} LIKE ?" for c in spec["search"])
         args = [f"%{q}%"] * len(spec["search"])
-    order = "active DESC, name COLLATE NOCASE" if kind == "crew" else "name COLLATE NOCASE"
+    order = {"crew": "active DESC, name COLLATE NOCASE",
+             "vehicles": "status = 'retired', name COLLATE NOCASE"}.get(kind, "name COLLATE NOCASE")
     rows = db.query(f"SELECT * FROM {spec['table']} {where} ORDER BY {order}", args)
     return render_template("people/list.html", kind=kind, spec=spec, rows=rows, q=q)
 
 
-@bp.route("/<any(clients, venues, crew):kind>/new", methods=["GET", "POST"])
+@bp.route(f"/{KIND_ROUTE}/new", methods=["GET", "POST"])
 def new(kind):
     spec = get_kind(kind)
     values, errors = {}, {}
@@ -109,7 +136,7 @@ def new(kind):
                            errors=errors, grouped=forms.sections(spec["fields"]))
 
 
-@bp.route("/<any(clients, venues, crew):kind>/<int:row_id>/edit", methods=["GET", "POST"])
+@bp.route(f"/{KIND_ROUTE}/<int:row_id>/edit", methods=["GET", "POST"])
 def edit(kind, row_id):
     spec = get_kind(kind)
     row = get_row(spec, row_id)
@@ -124,29 +151,41 @@ def edit(kind, row_id):
                            errors=errors, grouped=forms.sections(spec["fields"]))
 
 
-@bp.route("/<any(clients, venues, crew):kind>/<int:row_id>")
+@bp.route(f"/{KIND_ROUTE}/<int:row_id>")
 def detail(kind, row_id):
     spec = get_kind(kind)
     row = get_row(spec, row_id)
-    events, invoices, assignments, pay = [], [], [], None
-    if kind == "clients":
+    events, invoices, assignments, pay, paperwork = [], [], [], None, {}
+    if kind == "vehicles":
+        events = db.query(
+            """SELECT e.*, ev.description, ev.departs, c.name AS driver_name FROM event_vehicles ev
+               JOIN events e ON e.id = ev.event_id LEFT JOIN crew c ON c.id = ev.driver_id
+               WHERE ev.vehicle_id = ? ORDER BY e.event_date DESC""",
+            (row_id,),
+        )
+        paperwork = {k: services.paperwork_status(row[k]) for k in ("registration_expires", "insurance_expires")}
+    elif kind == "clients":
         events = db.query("SELECT * FROM events WHERE client_id = ? ORDER BY event_date DESC", (row_id,))
         for inv in db.query("SELECT * FROM invoices WHERE client_id = ? ORDER BY issue_date DESC", (row_id,)):
             totals = services.invoice_totals(inv)
             invoices.append({"row": inv, "totals": totals, "status": services.invoice_status(inv, totals)})
     elif kind == "venues":
         events = db.query("SELECT * FROM events WHERE venue_id = ? ORDER BY event_date DESC", (row_id,))
-    else:
+    elif kind == "crew":
         assignments = services.crew_pay_rows("a.crew_id = ?", (row_id,))
         pay = {**services.crew_pay_summary(assignments), "by_year": services.paid_by_year(assignments)}
     return render_template("people/detail.html", kind=kind, spec=spec, row=row, events=events,
-                           invoices=invoices, assignments=assignments, pay=pay)
+                           invoices=invoices, assignments=assignments, pay=pay, paperwork=paperwork,
+                           today=util.today().isoformat())
 
 
-@bp.route("/<any(clients, venues, crew):kind>/<int:row_id>/delete", methods=["POST"])
+@bp.route(f"/{KIND_ROUTE}/<int:row_id>/delete", methods=["POST"])
 def delete(kind, row_id):
     spec = get_kind(kind)
     row = get_row(spec, row_id)
+    if kind == "vehicles" and db.scalar("SELECT 1 FROM event_vehicles WHERE vehicle_id = ?", (row_id,)):
+        flash(f"{row['name']} is on event schedules. Set its status to Retired instead so the history is kept.", "bad")
+        return redirect(url_for("people.detail", kind=kind, row_id=row_id))
     db.execute(f"DELETE FROM {spec['table']} WHERE id = ?", (row_id,))
     flash(f"Deleted {row['name']}.", "ok")
     return redirect(url_for("people.index", kind=kind))

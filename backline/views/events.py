@@ -3,13 +3,13 @@ from datetime import date, timedelta
 
 from flask import Blueprint, Response, abort, flash, g, jsonify, redirect, render_template, request, url_for
 
-from .. import db, forms, services, util
-from ..defaults import SERVICE_TYPES, VENUE_SETTINGS
+from .. import db, files, forms, services, util
+from ..defaults import FILE_CATEGORIES, SERVICE_TYPES, VENUE_SETTINGS
 from ..forms import Field
 
 bp = Blueprint("events", __name__)
 
-TABS = ["overview", "crew", "gear", "checklist", "chat", "documents"]
+TABS = ["overview", "crew", "gear", "transport", "checklist", "chat", "documents"]
 
 
 def client_choices():
@@ -307,6 +307,7 @@ def delete(event_id):
     if db.scalar("SELECT 1 FROM contracts WHERE event_id = ? AND status = 'signed'", (event_id,)):
         flash("This event has a signed contract, so it can't be deleted. Set its status to Cancelled instead.", "bad")
         return _back(event_id, "overview")
+    files.delete_all_event_files(event_id)
     db.execute("DELETE FROM events WHERE id = ?", (event_id,))
     flash(f"Deleted event {event['reference_number']}.", "ok")
     return redirect(url_for("events.index"))
@@ -343,8 +344,14 @@ def duplicate(event_id):
            SELECT ?, section, text, crew_visible, sort FROM event_checklist_items WHERE event_id = ?""",
         (new_id, event_id),
     )
+    conn.execute(
+        """INSERT INTO event_vehicles (event_id, vehicle_id, description, departs, notes, sort)
+           SELECT ?, vehicle_id, description, departs, notes, sort FROM event_vehicles WHERE event_id = ?""",
+        (new_id, event_id),
+    )
     conn.commit()
-    flash("Event copied with its gear list and checklist. Crew, contracts and invoices were not copied.", "ok")
+    flash("Event copied with its gear list, vehicles and checklist. Crew, drivers, documents, contracts and "
+          "invoices were not copied.", "ok")
     return redirect(url_for("events.detail", event_id=new_id))
 
 
@@ -371,8 +378,14 @@ def detail(event_id):
     for inv in db.query("SELECT * FROM invoices WHERE event_id = ? ORDER BY id DESC", (event_id,)):
         totals = services.invoice_totals(inv)
         invoices.append({"row": inv, "totals": totals, "status": services.invoice_status(inv, totals)})
+    vehicles = services.event_vehicles(event_id)
+    vehicle_problems = services.vehicle_problems(event)
+    event_files = files.event_files(event_id)
     ctx = dict(
+        files=event_files, file_groups=_group(event_files, lambda f: f["category"]),
+        file_categories=FILE_CATEGORIES,
         **_people_and_places(event),
+        vehicles=vehicles, vehicle_problems=vehicle_problems, vehicle_label=services.vehicle_label,
         messages=event_messages(event_id),
         event=event, tab=tab, crew=crew, gear=gear,
         availability=availability, checklist=checklist, contracts=contracts, invoices=invoices,
@@ -401,6 +414,20 @@ def detail(event_id):
         ctx["categories"] = util.INVENTORY_CATEGORIES
     if tab == "checklist":
         ctx["templates"] = db.query("SELECT * FROM checklist_templates ORDER BY id")
+    if tab == "transport":
+        fleet = []
+        for v in db.query("SELECT * FROM vehicles WHERE status != 'retired' ORDER BY name COLLATE NOCASE"):
+            booked = services.vehicle_bookings(v["id"], event["event_date"], util.event_end(event), event_id)
+            fleet.append({"row": v, "booked": booked})
+        ctx["fleet"] = fleet
+        # Drivers: this event's crew first, then everyone else who's active.
+        on_event = {a["crew_id"] for a in crew}
+        ctx["drivers"] = sorted(
+            db.query("SELECT id, name FROM crew WHERE active = 1 OR id IN (SELECT driver_id FROM event_vehicles "
+                     "WHERE event_id = ?) ORDER BY name COLLATE NOCASE", (event_id,)),
+            key=lambda c: c["id"] not in on_event,
+        )
+        ctx["crew_ids"] = on_event
     ctx["gear_groups"] = _group(gear, services.gear_category)
     ctx["checklist_groups"] = _group_sections(checklist)
     return render_template("events/detail.html", **ctx, gear_label=services.gear_label)
@@ -490,6 +517,8 @@ def worksheet_context(event, assignment):
         gear_groups=_group(gear, services.gear_category), gear_label=services.gear_label,
         checklist_groups=_group_sections(checklist),
         messages=event_messages(event["id"]),
+        vehicles=services.event_vehicles(event["id"]), vehicle_label=services.vehicle_label,
+        files=files.event_files(event["id"], crew_only=assignment is not None),
         settings=db.get_settings(),
     )
 
@@ -694,6 +723,143 @@ def copy_gear(event_id):
     )
     flash("Gear list copied.", "ok")
     return _back(event_id, "gear")
+
+
+# --- Transport -------------------------------------------------------------------
+
+def _vehicle_fields(data, errors):
+    """Driver, departure time and notes shared by the add and update forms."""
+    driver_id = request.form.get("driver_id", type=int)
+    if driver_id and not db.scalar("SELECT 1 FROM crew WHERE id = ?", (driver_id,)):
+        errors["driver_id"] = "Pick a valid driver."
+    departs = request.form.get("departs", "").strip()
+    if departs:
+        parsed, departs_errors = forms.parse([Field("departs", "Departs", type="time")], {"departs": departs})
+        errors.update(departs_errors)
+        departs = parsed["departs"]
+    data.update(driver_id=driver_id or None, departs=departs or None,
+                notes=request.form.get("notes", "").strip() or None)
+
+
+@bp.route("/events/<int:event_id>/vehicles", methods=["POST"])
+def add_vehicle(event_id):
+    get_event(event_id)
+    data, errors = {"event_id": event_id}, {}
+    if request.form.get("kind") == "third_party":
+        description = request.form.get("description", "").strip()
+        if not description:
+            errors["description"] = "Describe the vehicle (who owns it, what it is, plate)."
+        data["description"] = description
+    else:
+        vehicle = db.query("SELECT * FROM vehicles WHERE id = ?", (request.form.get("vehicle_id", type=int),), one=True)
+        if vehicle is None:
+            errors["vehicle_id"] = "Pick a company vehicle."
+        else:
+            data["vehicle_id"] = vehicle["id"]
+    _vehicle_fields(data, errors)
+    if errors:
+        flash(" ".join(errors.values()), "bad")
+        return _back(event_id, "transport")
+    data["sort"] = db.scalar("SELECT COALESCE(MAX(sort), -1) + 1 FROM event_vehicles WHERE event_id = ?", (event_id,))
+    db.insert("event_vehicles", data)
+    flash("Vehicle added.", "ok")
+    return _back(event_id, "transport")
+
+
+def _get_event_vehicle(event_id, row_id):
+    row = db.query("SELECT * FROM event_vehicles WHERE id = ? AND event_id = ?", (row_id, event_id), one=True)
+    if row is None:
+        abort(404)
+    return row
+
+
+@bp.route("/events/<int:event_id>/vehicles/<int:row_id>", methods=["POST"])
+def update_vehicle(event_id, row_id):
+    row = _get_event_vehicle(event_id, row_id)
+    data, errors = {}, {}
+    if not row["vehicle_id"]:
+        data["description"] = request.form.get("description", "").strip()
+        if not data["description"]:
+            errors["description"] = "Describe the vehicle."
+    _vehicle_fields(data, errors)
+    if errors:
+        flash(" ".join(errors.values()), "bad")
+    else:
+        db.update("event_vehicles", row_id, data)
+        flash("Vehicle saved.", "ok")
+    return _back(event_id, "transport")
+
+
+@bp.route("/events/<int:event_id>/vehicles/<int:row_id>/delete", methods=["POST"])
+def delete_vehicle(event_id, row_id):
+    _get_event_vehicle(event_id, row_id)
+    db.execute("DELETE FROM event_vehicles WHERE id = ?", (row_id,))
+    flash("Vehicle removed from this event.", "ok")
+    return _back(event_id, "transport")
+
+
+# --- Documents -------------------------------------------------------------------
+
+@bp.route("/events/<int:event_id>/files", methods=["POST"])
+def upload_files(event_id):
+    get_event(event_id)
+    uploads = [f for f in request.files.getlist("files") if f and f.filename]
+    if not uploads:
+        flash("Choose one or more files to upload.", "bad")
+        return _back(event_id, "documents", "upload")
+    category = request.form.get("category")
+    if category not in FILE_CATEGORIES:
+        category = "Other"
+    saved, problems = 0, []
+    for upload in uploads:
+        try:
+            files.save_event_file(
+                event_id, upload.filename, upload, category=category,
+                description=request.form.get("description", "").strip(), source=request.form.get("source", "").strip(),
+                crew_visible=bool(request.form.get("crew_visible")), uploaded_by=g.user["username"],
+            )
+            saved += 1
+        except ValueError as exc:
+            problems.append(str(exc))
+    if saved:
+        flash(f"Uploaded {saved} file{'s' if saved != 1 else ''}.", "ok")
+    if problems:
+        flash(" ".join(problems) + " Accepted types: " + ", ".join(sorted(files.ALLOWED_EXTENSIONS)) + ".", "bad")
+    return _back(event_id, "documents", "files")
+
+
+def _get_file(event_id, file_id):
+    row = db.query("SELECT * FROM event_files WHERE id = ? AND event_id = ?", (file_id, event_id), one=True)
+    if row is None:
+        abort(404)
+    return row
+
+
+@bp.route("/events/<int:event_id>/files/<int:file_id>")
+def download_file(event_id, file_id):
+    return files.send_event_file(_get_file(event_id, file_id))
+
+
+@bp.route("/events/<int:event_id>/files/<int:file_id>", methods=["POST"])
+def update_file(event_id, file_id):
+    _get_file(event_id, file_id)
+    category = request.form.get("category")
+    db.update("event_files", file_id, {
+        "category": category if category in FILE_CATEGORIES else "Other",
+        "description": request.form.get("description", "").strip() or None,
+        "source": request.form.get("source", "").strip() or None,
+        "crew_visible": 1 if request.form.get("crew_visible") else 0,
+    })
+    flash("Document saved.", "ok")
+    return _back(event_id, "documents", "files")
+
+
+@bp.route("/events/<int:event_id>/files/<int:file_id>/delete", methods=["POST"])
+def delete_file(event_id, file_id):
+    row = _get_file(event_id, file_id)
+    files.delete_event_file(row)
+    flash(f"Deleted {row['original_name']}.", "ok")
+    return _back(event_id, "documents", "files")
 
 
 # --- Checklist ---------------------------------------------------------------

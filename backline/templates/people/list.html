@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import empty %}
+{% from "_macros.html" import badge, empty %}
 {% block title %}{{ spec.title }}{% endblock %}
 {% block heading %}<h1>{{ spec.title }}</h1>{% endblock %}
 {% block actions %}<a class="btn btn-primary" href="{{ url_for('people.new', kind=kind) }}">+ Add {{ spec.singular }}</a>{% endblock %}
@@ -22,6 +22,7 @@
         {% elif col == 'email' and r[col] %}<td><a href="mailto:{{ r[col] }}">{{ r[col] }}</a></td>
         {% elif col.endswith('rate') %}<td class="num">{{ r[col]|money if r[col] else '—' }}</td>
         {% elif col == 'active' %}<td>{{ 'Yes' if r[col] else 'No' }}</td>
+        {% elif col == 'status' %}<td>{{ badge(r[col]) }}</td>
         {% else %}<td>{{ r[col] or '—' }}</td>{% endif %}
       {% endfor %}
       </tr>

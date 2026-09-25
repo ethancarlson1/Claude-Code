@@ -4,9 +4,9 @@ contracts and invoicing for an audio and backline rental company."""
 import os
 import secrets
 
-from flask import Flask
+from flask import Flask, flash, redirect, request
 
-from . import db, util
+from . import db, files, util
 
 
 def _load_secret_key(instance_path):
@@ -35,7 +35,9 @@ def create_app(test_config=None):
         CSRF_ENABLED=True,
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
-        MAX_CONTENT_LENGTH=5 * 1024 * 1024,
+        UPLOAD_FOLDER=os.environ.get("BACKLINE_UPLOADS", os.path.join(app.instance_path, "uploads")),
+        # Largest request accepted: covers a batch of event documents (tech packs can be big).
+        MAX_CONTENT_LENGTH=int(os.environ.get("BACKLINE_MAX_UPLOAD_MB", "50")) * 1024 * 1024,
     )
     if test_config:
         app.config.update(test_config)
@@ -51,6 +53,14 @@ def create_app(test_config=None):
 
     db.init_app(app)
     util.init_app(app)
+    app.jinja_env.filters["filesize"] = files.filesize
+
+    @app.errorhandler(413)
+    def too_large(_error):
+        limit = app.config["MAX_CONTENT_LENGTH"] // (1024 * 1024)
+        flash(f"That upload is too large. The limit is {limit} MB at a time; try fewer or smaller files.", "bad")
+        back = request.referrer or "/"
+        return redirect(back if back.startswith(request.host_url) else "/")
 
     from . import auth
     from .views import (

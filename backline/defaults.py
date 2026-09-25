@@ -478,3 +478,18 @@ OLD_EVENT_TYPE_NAMES = {
     "Worship": "Worship / Community",
     "Rehearsal": "Other",
 }
+
+VEHICLE_TYPES = ["Box truck", "Cargo van", "Sprinter / high-roof van", "Pickup", "Trailer", "Car / SUV", "Other"]
+
+FILE_CATEGORIES = [
+    "Stage plot",
+    "Input list",
+    "Rider / tech rider",
+    "Venue tech pack",
+    "Parking / load-in map",
+    "Floor plan / site map",
+    "Run of show / agenda",
+    "Contract / paperwork",
+    "Photos",
+    "Other",
+]

@@ -19,6 +19,28 @@
       {% else %}<p class="muted">No events yet.</p>{% endif %}
     </section>
     {% endif %}
+    {% if kind == 'vehicles' %}
+    {% set upcoming = events|selectattr('event_date', 'ge', today)|list %}
+    {% set past = events|selectattr('event_date', 'lt', today)|list %}
+    <section class="card">
+      <h2>Upcoming trips</h2>
+      {% if upcoming %}
+      <div class="table-wrap"><table><thead><tr><th>Date</th><th>Event</th><th>Status</th><th>Driver</th><th>Departs</th></tr></thead><tbody>
+      {% for e in upcoming|reverse %}<tr><td class="nowrap">{{ e.event_date|fdate }}{% if e.end_date %}<div class="small muted">to {{ e.end_date|fdate('short') }}</div>{% endif %}</td>
+        <td><a href="{{ url_for('events.detail', event_id=e.id, tab='transport') }}">{{ e.title }}</a></td><td>{{ badge(e.status) }}</td>
+        <td>{{ e.driver_name or '—' }}</td><td>{{ e.departs|ftime or '—' }}</td></tr>{% endfor %}
+      </tbody></table></div>
+      {% else %}<p class="muted">Not booked on any upcoming events.</p>{% endif %}
+    </section>
+    <section class="card">
+      <h2>History</h2>
+      {% if past %}
+      <div class="table-wrap"><table><thead><tr><th>Date</th><th>Event</th><th>Driver</th></tr></thead><tbody>
+      {% for e in past %}<tr><td class="nowrap">{{ e.event_date|fdate }}</td><td><a href="{{ url_for('events.detail', event_id=e.id, tab='transport') }}">{{ e.title }}</a></td><td>{{ e.driver_name or '—' }}</td></tr>{% endfor %}
+      </tbody></table></div>
+      {% else %}<p class="muted">No past trips.</p>{% endif %}
+    </section>
+    {% endif %}
     {% if kind == 'clients' %}
     <section class="card">
       <h2>Invoices</h2>
@@ -63,7 +85,7 @@
         {% if f.type == 'checkbox' %}<dt>{{ f.label }}</dt><dd>{{ 'Yes' if v else 'No' }}</dd>
         {% elif v not in (none, '') %}
           <dt>{{ f.label }}</dt>
-          <dd class="{{ 'pre' if f.type == 'textarea' }}">{% if f.type == 'money' %}{{ v|money }}{% elif f.type == 'email' %}<a href="mailto:{{ v }}">{{ v }}</a>{% elif f.type == 'tel' %}<a href="tel:{{ v }}">{{ v }}</a>{% else %}{{ v }}{% endif %}</dd>
+          <dd class="{{ 'pre' if f.type == 'textarea' }}">{% if f.type == 'money' %}{{ v|money }}{% elif f.type == 'date' %}{{ v|fdate('short') }}{% if paperwork.get(f.name) %} {{ badge(paperwork[f.name]) }}{% endif %}{% elif f.name == 'status' %}{{ badge(v) }}{% elif f.type == 'email' %}<a href="mailto:{{ v }}">{{ v }}</a>{% elif f.type == 'tel' %}<a href="tel:{{ v }}">{{ v }}</a>{% else %}{{ v }}{% endif %}</dd>
         {% endif %}
       {% endfor %}
     </dl>

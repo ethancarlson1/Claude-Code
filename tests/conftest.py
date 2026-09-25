@@ -11,6 +11,7 @@ def app(tmp_path):
     app = create_app({
         "TESTING": True,
         "DATABASE": os.path.join(tmp_path, "test.sqlite3"),
+        "UPLOAD_FOLDER": os.path.join(tmp_path, "uploads"),
         "SECRET_KEY": "test",
         "CSRF_ENABLED": False,
     })

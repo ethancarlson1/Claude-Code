@@ -179,6 +179,8 @@ def status_class(status):
         "received": "ok",
         "due": "info",
         "active": "ok",
+        "expired": "bad",
+        "expiring": "warn",
         "maintenance": "warn",
         "retired": "muted",
     }.get(status, "muted")

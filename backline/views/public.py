@@ -3,7 +3,7 @@ client invoices. Each is reached through an unguessable per-record key."""
 
 from flask import Blueprint, Response, abort, flash, redirect, render_template, request, url_for
 
-from .. import db, services, util
+from .. import db, files, services, util
 from .events import worksheet_context
 from .invoices import invoice_bundle
 
@@ -49,6 +49,17 @@ def post_message(reference, key):
             "body": body[:4000], "created_at": util.now_iso(),
         })
     return redirect(url_for("public.worksheet", reference=reference, key=key) + "#chat")
+
+
+@bp.route("/worksheet/<reference>/<key>/files/<int:file_id>")
+def worksheet_file(reference, key, file_id):
+    """Documents the office shared with crew (stage plots, maps...)."""
+    assignment = _assignment(reference, key)
+    row = db.query("SELECT * FROM event_files WHERE id = ? AND event_id = ? AND crew_visible = 1",
+                   (file_id, assignment["event_id"]), one=True)
+    if row is None:
+        abort(404)
+    return files.send_event_file(row)
 
 
 @bp.route("/worksheet/<reference>/<key>/event.ics")

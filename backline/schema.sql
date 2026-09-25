@@ -76,6 +76,21 @@ CREATE TABLE IF NOT EXISTS inventory_items (
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Company fleet. Third-party vehicles live only on event_vehicles.
+CREATE TABLE IF NOT EXISTS vehicles (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,                          -- e.g. "Box Truck 1"
+    vehicle_type TEXT,                           -- box truck, cargo van, trailer...
+    make_model TEXT,
+    plate TEXT,
+    capacity TEXT,                               -- e.g. "16 ft box, liftgate"
+    status TEXT NOT NULL DEFAULT 'active',       -- active | maintenance | retired
+    registration_expires TEXT,
+    insurance_expires TEXT,
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS events (
     id INTEGER PRIMARY KEY,
     reference_number TEXT NOT NULL UNIQUE,
@@ -169,6 +184,35 @@ CREATE TABLE IF NOT EXISTS event_messages (
     author TEXT NOT NULL,
     body TEXT NOT NULL,
     created_at TEXT NOT NULL
+);
+
+-- Vehicles moving gear for an event: a company vehicle (vehicle_id) or a
+-- third-party one (vehicle_id NULL, described in `description`).
+CREATE TABLE IF NOT EXISTS event_vehicles (
+    id INTEGER PRIMARY KEY,
+    event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    vehicle_id INTEGER REFERENCES vehicles(id) ON DELETE SET NULL,
+    description TEXT,                            -- third-party vehicle, e.g. "Penske 16' box truck rental"
+    driver_id INTEGER REFERENCES crew(id) ON DELETE SET NULL,
+    departs TEXT,                                -- HH:MM, leaving the shop
+    notes TEXT,
+    sort INTEGER NOT NULL DEFAULT 0
+);
+
+-- Documents attached to an event: stage plots, input lists, tech packs...
+-- Files live in the uploads folder under `stored_name`.
+CREATE TABLE IF NOT EXISTS event_files (
+    id INTEGER PRIMARY KEY,
+    event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    category TEXT NOT NULL DEFAULT 'Other',
+    description TEXT,
+    source TEXT,                                 -- who provided it: artist, venue, planner...
+    original_name TEXT NOT NULL,
+    stored_name TEXT NOT NULL UNIQUE,
+    size INTEGER NOT NULL DEFAULT 0,
+    crew_visible INTEGER NOT NULL DEFAULT 1,     -- linked from crew worksheets
+    uploaded_by TEXT,
+    uploaded_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS checklist_templates (

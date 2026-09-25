@@ -63,6 +63,28 @@
     </section>
     {% endif %}
 
+    {% if vehicle_conflicts %}
+    <section class="card">
+      <h2>Vehicle conflicts</h2>
+      <ul class="checklist">
+        {% for e, labels in vehicle_conflicts %}
+          <li><span class="text"><a href="{{ url_for('events.detail', event_id=e.id, tab='transport') }}">{{ e.title }}</a> — {{ labels|join(', ') }} double-booked or out of service</span><span class="meta">{{ e.event_date|fdate('short') }}</span></li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+
+    {% if paperwork %}
+    <section class="card">
+      <h2>Vehicle paperwork</h2>
+      <ul class="checklist">
+        {% for v, label, date, state in paperwork %}
+          <li><span class="text"><a href="{{ url_for('people.detail', kind='vehicles', row_id=v.id) }}">{{ v.name }}</a> — {{ label }} {{ 'expired' if state == 'expired' else 'expires soon' }}</span><span class="meta">{{ badge(state) }} {{ date|fdate('short') }}</span></li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+
     {% if not_returned %}
     <section class="card">
       <h2>Gear not checked back in</h2>
