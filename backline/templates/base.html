@@ -21,6 +21,7 @@
       <li><a href="{{ url_for('dashboard.index') }}" class="{{ 'active' if ep == 'dashboard.index' }}">Dashboard</a></li>
       <li><a href="{{ url_for('events.calendar') }}" class="{{ 'active' if ep == 'events.calendar' }}">Calendar</a></li>
       <li><a href="{{ url_for('events.index') }}" class="{{ 'active' if ep.startswith('events.') and ep != 'events.calendar' }}">Events</a></li>
+      <li><a href="{{ url_for('requests.index') }}" class="{{ 'active' if ep.startswith('requests.') }}">Requests{% if new_requests %} <span class="nav-count" title="{{ new_requests }} new">{{ new_requests }}</span>{% endif %}</a></li>
       <li><a href="{{ url_for('inventory.index') }}" class="{{ 'active' if ep.startswith('inventory.') }}">Inventory</a></li>
       <li><a href="{{ url_for('people.index', kind='vehicles') }}" class="{{ 'active' if request.view_args and request.view_args.get('kind') == 'vehicles' }}">Vehicles</a></li>
       <li class="nav-label">Billing &amp; pay</li>

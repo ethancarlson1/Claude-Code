@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Request received{% endblock %}
+{% block body_class %}intake-page{% endblock %}
+{% block shell %}
+<main class="intake">
+  <section class="card intake-done">
+    <div class="auth-logo" style="max-width:230px"><img src="{{ logo_url }}" alt="{{ company_name }}"></div>
+    <h1>Thanks{% if sent %}, {{ sent.name.split()[0] }}{% endif %}!</h1>
+    <p>We've got your event request{% if sent %} (#{{ sent.id }}){% endif %}. We'll look it over and get back to you with any questions and a quote.</p>
+    {% if sent and sent.skipped %}
+      <div class="flash flash-warn" style="text-align:left">Some files couldn't be attached: {{ sent.skipped|join('; ') }} Please email them to us instead.</div>
+    {% endif %}
+    {% if settings.company_phone or settings.company_email %}
+      <p class="muted">Anything to add or change? {% if settings.company_phone %}Call <a href="tel:{{ settings.company_phone }}">{{ settings.company_phone }}</a>{% endif %}{% if settings.company_phone and settings.company_email %} or email {% elif settings.company_email %}Email {% endif %}{% if settings.company_email %}<a href="mailto:{{ settings.company_email }}">{{ settings.company_email }}</a>{% endif %}.</p>
+    {% endif %}
+    <p><a href="{{ url_for('intake.form') }}">Send another request</a></p>
+  </section>
+  <span data-clear-draft="event-request" hidden></span>
+</main>
+{% endblock %}

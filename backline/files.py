@@ -35,10 +35,10 @@ def upload_folder():
     return path
 
 
-def save_event_file(event_id, filename, data, category="Other", description=None, source=None,
-                    crew_visible=True, uploaded_by=None):
-    """Store an uploaded file (a werkzeug FileStorage or raw bytes) for an event.
-    Raises ValueError with a readable message if it can't be accepted."""
+def store_upload(filename, data):
+    """Write an uploaded file (a werkzeug FileStorage or raw bytes) to the
+    uploads folder under a random name. Returns (original name, stored name,
+    size). Raises ValueError with a readable message if it can't be accepted."""
     original = os.path.basename((filename or "").replace("\\", "/")).strip()[:200]
     ext = extension(original)
     if not original or ext not in ALLOWED_EXTENSIONS:
@@ -54,6 +54,13 @@ def save_event_file(event_id, filename, data, category="Other", description=None
     if size == 0:
         os.remove(path)
         raise ValueError(f"{original} is empty.")
+    return original, stored, size
+
+
+def save_event_file(event_id, filename, data, category="Other", description=None, source=None,
+                    crew_visible=True, uploaded_by=None):
+    """Store an uploaded file for an event. Raises ValueError if it can't be accepted."""
+    original, stored, size = store_upload(filename, data)
     return db.insert("event_files", {
         "event_id": event_id, "category": category, "description": description or None, "source": source or None,
         "original_name": original, "stored_name": stored, "size": size, "crew_visible": 1 if crew_visible else 0,
@@ -70,7 +77,11 @@ def event_files(event_id, crew_only=False):
 
 
 def _remove_from_disk(row):
-    path = os.path.join(current_app.config["UPLOAD_FOLDER"], row["stored_name"])
+    remove_stored(row["stored_name"])
+
+
+def remove_stored(stored_name):
+    path = os.path.join(current_app.config["UPLOAD_FOLDER"], stored_name)
     if os.path.exists(path):
         os.remove(path)
 

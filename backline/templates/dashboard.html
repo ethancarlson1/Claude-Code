@@ -41,6 +41,17 @@
   </section>
 
   <div>
+    {% if new_request_rows %}
+    <section class="card">
+      <div class="card-head"><h2>New event requests</h2><a class="small" href="{{ url_for('requests.index') }}">All requests &rarr;</a></div>
+      <ul class="checklist">
+        {% for r in new_request_rows %}
+          <li><span class="text"><a href="{{ url_for('requests.detail', request_id=r.id) }}">{{ r.name }}{% if r.organization %} · {{ r.organization }}{% endif %}</a>{% if r.event_type %} — {{ r.event_type }}{% endif %}</span><span class="meta">{{ r.event_date|fdate('short') if r.event_date else 'date TBD' }}</span></li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+
     <section class="card">
       <h2>Needs attention (next 14 days)</h2>
       {% if attention %}

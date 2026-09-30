@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf %}
+{% block title %}Create inquiry{% endblock %}
+{% block heading %}<h1>Create an inquiry</h1><div class="sub">From <a href="{{ url_for('requests.detail', request_id=req.id) }}">request #{{ req.id }}</a> · {{ req.name }}</div>{% endblock %}
+{% block content %}
+{% macro err(key) %}{% if errors.get(key) %}<div class="error">{{ errors[key] }}</div>{% endif %}{% endmacro %}
+<form method="post" class="split">
+  {{ csrf() }}
+  <section class="card">
+    <h2>Check the basics</h2>
+    <div class="grid-form">
+      <div class="field wide{% if errors.title %} has-error{% endif %}"><label for="title">Event title</label><input id="title" name="title" value="{{ values.title }}" required>{{ err('title') }}</div>
+      <div class="field{% if errors.event_type %} has-error{% endif %}"><label for="event_type">Event type</label>
+        <select id="event_type" name="event_type"><option value="">No type</option>
+          {% for t in types %}<option value="{{ t }}" {% if t == values.event_type %}selected{% endif %}>{{ t }}</option>{% endfor %}
+        </select>{{ err('event_type') }}
+        {% if answers.event_type and answers.event_type not in types %}<div class="help">They chose “{{ answers.event_type }}”.</div>{% endif %}
+      </div>
+      <div class="field{% if errors.event_date %} has-error{% endif %}"><label for="event_date">Date</label><input id="event_date" name="event_date" type="date" value="{{ values.event_date }}">{{ err('event_date') }}
+        {% if not answers.event_date %}<div class="help">They didn't give a date yet.</div>{% endif %}</div>
+      <div class="field{% if errors.end_date %} has-error{% endif %}"><label for="end_date">End date</label><input id="end_date" name="end_date" type="date" value="{{ values.end_date }}">{{ err('end_date') }}<div class="help">Multi-day events only.</div></div>
+      <div class="field wide{% if errors.client %} has-error{% endif %}"><label for="client">Client</label>
+        <select id="client" name="client">
+          <option value="new" {% if values.client == 'new' %}selected{% endif %}>New client: {{ answers.name }}{% if answers.organization %} ({{ answers.organization }}){% endif %}</option>
+          {% for id, label in clients %}<option value="{{ id }}" {% if id|string == values.client %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>{{ err('client') }}
+        {% if client_why %}<div class="help">Matched an existing client by {{ client_why }}.</div>{% endif %}
+      </div>
+      <div class="field wide{% if errors.venue %} has-error{% endif %}"><label for="venue">Venue</label>
+        <select id="venue" name="venue">
+          <option value="" {% if not values.venue %}selected{% endif %}>No venue yet</option>
+          {% if answers.venue_name %}<option value="new" {% if values.venue == 'new' %}selected{% endif %}>New venue: {{ answers.venue_name }}</option>{% endif %}
+          {% for id, label in venues %}<option value="{{ id }}" {% if id|string == values.venue %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>{{ err('venue') }}
+      </div>
+    </div>
+    <div class="form-actions"><button class="btn btn-primary" type="submit">Create inquiry</button><a class="btn" href="{{ url_for('requests.detail', request_id=req.id) }}">Cancel</a></div>
+  </section>
+  <section class="card">
+    <h2>Also filled in</h2>
+    {% if filled %}<ul class="small">{% for label in filled %}<li>{{ label }}</li>{% endfor %}</ul>{% else %}<p class="small muted">Nothing else: they only left contact details.</p>{% endif %}
+    <p class="small">Plus the event type's checklists and run-of-show starter{% if file_count %}, {{ file_count }} attached file{{ 's' if file_count != 1 }} (office only until you share them){% endif %}, and a note with their description, layout, budget and anything else they wrote.</p>
+    <p class="help">It starts as an <strong>inquiry</strong>, so it doesn't reserve gear until you change it to Hold or Confirmed.</p>
+  </section>
+</form>
+{% endblock %}

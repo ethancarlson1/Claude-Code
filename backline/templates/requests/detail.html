@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf, badge, delete_button %}
+{% block title %}Request from {{ req.name }}{% endblock %}
+{% block heading %}<h1>Request #{{ req.id }} {{ badge(req.status) }}</h1>
+  <div class="sub">{{ req.name }}{% if req.organization %} · {{ req.organization }}{% endif %} · received {{ req.created_at|fdatetime }}</div>{% endblock %}
+{% block content %}
+<div class="split">
+  <div class="stack">
+    {% for title, rows in summary %}
+    <section class="card">
+      <h2>{{ title }}</h2>
+      <dl class="facts">
+        {% for label, text in rows %}<dt>{{ label }}</dt><dd class="pre">{{ text }}</dd>{% endfor %}
+      </dl>
+    </section>
+    {% endfor %}
+    {% if files %}
+    <section class="card">
+      <h2>Attached files</h2>
+      <table><tbody>
+        {% for f in files %}<tr><td><a href="{{ url_for('requests.download_file', request_id=req.id, file_id=f.id) }}">{{ f.original_name }}</a></td><td class="num small muted">{{ f.size|filesize }}</td></tr>{% endfor %}
+      </tbody></table>
+      <p class="help">These move to the event's Documents tab (office only until you share them with crew).</p>
+    </section>
+    {% endif %}
+  </div>
+
+  <div class="stack">
+    <section class="card">
+      <h2>Next step</h2>
+      {% if req.status == 'converted' and event %}
+        <p>This request is part of <a href="{{ url_for('events.detail', event_id=event.id) }}"><strong>{{ event.title }}</strong></a>.</p>
+      {% elif req.status == 'converted' %}
+        <p class="muted">The event this request became has since been deleted.</p>
+      {% else %}
+        <p><a class="btn btn-primary" href="{{ url_for('requests.convert', request_id=req.id) }}">Create inquiry</a></p>
+        <p class="help">Makes a new event with this client, venue and everything they told you, ready for a gear list and quote.</p>
+        {% if events %}
+        <form method="post" action="{{ url_for('requests.add_to_event', request_id=req.id) }}" style="margin-top:1rem">
+          {{ csrf() }}
+          <div class="field">
+            <label for="event_id">Or add it to an existing event</label>
+            <select id="event_id" name="event_id" required>
+              <option value="">Choose an event…</option>
+              {% for id, label, near in events %}<option value="{{ id }}" {% if near %}selected{% endif %}>{{ label }}</option>{% endfor %}
+            </select>
+            <div class="help">Fills in anything the event is missing. Answers that differ from what's already there go into the office notes.</div>
+          </div>
+          <div class="form-actions"><button class="btn" type="submit">Add to event</button></div>
+        </form>
+        {% endif %}
+      {% endif %}
+    </section>
+
+    <section class="card">
+      <h2>Contact</h2>
+      <dl class="facts">
+        <dt>Name</dt><dd>{{ req.name }}</dd>
+        {% if req.organization %}<dt>Organization</dt><dd>{{ req.organization }}</dd>{% endif %}
+        {% if req.email %}<dt>Email</dt><dd><a href="mailto:{{ req.email }}">{{ req.email }}</a></dd>{% endif %}
+        {% if req.phone %}<dt>Phone</dt><dd><a href="tel:{{ req.phone }}">{{ req.phone }}</a></dd>{% endif %}
+      </dl>
+      {% if req.email %}
+      <p style="margin-top:.8rem"><a class="btn btn-small" href="{{ mailto(req.email, 'Your event request', 'Hi ' ~ req.name.split()[0] ~ ',\n\nThanks for telling us about your event' ~ (' on ' ~ (req.event_date|fdate('short')) if req.event_date else '') ~ '.\n\n\n' ~ settings.company_name) }}">Reply by email</a></p>
+      {% endif %}
+    </section>
+
+    {% if req.status != 'converted' %}
+    <section class="card">
+      {% if req.status == 'new' %}
+        <form method="post" action="{{ url_for('requests.set_status', request_id=req.id) }}" class="inline">{{ csrf() }}<input type="hidden" name="action" value="archive"><button class="btn" type="submit">Archive</button></form>
+      {% else %}
+        <form method="post" action="{{ url_for('requests.set_status', request_id=req.id) }}" class="inline">{{ csrf() }}<input type="hidden" name="action" value="reopen"><button class="btn" type="submit">Move back to New</button></form>
+      {% endif %}
+      {{ delete_button(url_for('requests.delete', request_id=req.id), 'this request and its files') }}
+      <p class="help" style="margin-top:.5rem">Archive requests you won't take on. Delete spam.</p>
+    </section>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

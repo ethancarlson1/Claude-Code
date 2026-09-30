@@ -84,7 +84,9 @@
         <dt>Transport</dt><dd>{% for v in vehicles %}<div>{{ vehicle_label(v) }}{% if v.driver_name %} <span class="small muted">· driver {{ v.driver_name }}</span>{% endif %}</div>{% else %}<a href="{{ url_for('events.detail', event_id=event.id, tab='transport') }}">No vehicle assigned</a>{% endfor %}</dd>
         {% if event.parking %}<dt>Parking / load-in</dt><dd class="pre">{{ event.parking }}</dd>{% endif %}
         {% if venue and venue.load_in_notes %}<dt>Venue load-in</dt><dd class="pre">{{ venue.load_in_notes }}</dd>{% endif %}
+        {% if venue and venue.parking_notes %}<dt>Venue parking</dt><dd class="pre">{{ venue.parking_notes }}</dd>{% endif %}
         {% if venue and venue.power_notes %}<dt>Venue power</dt><dd class="pre">{{ venue.power_notes }}</dd>{% endif %}
+        {% if venue and venue.stage_notes %}<dt>Stage</dt><dd class="pre">{{ venue.stage_notes }}</dd>{% endif %}
       </dl>
     </section>
     <section class="card">

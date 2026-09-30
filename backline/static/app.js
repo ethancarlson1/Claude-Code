@@ -200,4 +200,66 @@
     });
     recalc();
   }
+
+  // Event request form: keep a draft on this device so nothing typed is lost
+  // (a closed tab, a dropped connection, an upload that was too big...).
+  var storage = {
+    get: function (k) { try { return JSON.parse(window.localStorage.getItem(k) || "null"); } catch (e) { return null; } },
+    set: function (k, v) { try { window.localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* private mode */ } },
+    drop: function (k) { try { window.localStorage.removeItem(k); } catch (e) { /* private mode */ } }
+  };
+  document.querySelectorAll("[data-clear-draft]").forEach(function (el) {
+    storage.drop("draft:" + el.getAttribute("data-clear-draft"));
+  });
+  var draftForm = document.querySelector("form[data-autosave]");
+  if (draftForm) {
+    var draftKey = "draft:" + draftForm.getAttribute("data-autosave");
+    var skip = function (el) { return !el.name || el.type === "file" || el.type === "hidden" || el.name === "website"; };
+    var saveDraft = function () {
+      var data = {};
+      Array.prototype.forEach.call(draftForm.elements, function (el) {
+        if (skip(el)) return;
+        if (el.type === "checkbox" || el.type === "radio") {
+          if (el.checked) (data[el.name] = data[el.name] || []).push(el.value);
+        } else if (el.value) {
+          data[el.name] = el.value;
+        }
+      });
+      storage.set(draftKey, data);
+    };
+    var saved = draftForm.getAttribute("data-fresh") === "1" ? storage.get(draftKey) : null;
+    if (saved && Object.keys(saved).length) {
+      Array.prototype.forEach.call(draftForm.elements, function (el) {
+        if (skip(el) || !(el.name in saved)) return;
+        if (el.type === "checkbox" || el.type === "radio") el.checked = saved[el.name].indexOf(el.value) !== -1;
+        else el.value = saved[el.name];
+      });
+      var note = document.querySelector("[data-restore-note]");
+      if (note) note.hidden = false;
+    }
+    var timer;
+    draftForm.addEventListener("input", function () { clearTimeout(timer); timer = setTimeout(saveDraft, 400); });
+    draftForm.addEventListener("change", saveDraft);
+    document.querySelectorAll("[data-clear-form]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        storage.drop(draftKey);
+        draftForm.reset();
+        btn.closest("[data-restore-note]").hidden = true;
+      });
+    });
+    // Catch uploads that are too big before sending, instead of losing the whole form.
+    var fileInput = draftForm.querySelector("input[type=file][data-max-bytes]");
+    if (fileInput) fileInput.addEventListener("change", function () {
+      var max = parseInt(fileInput.getAttribute("data-max-bytes"), 10);
+      var maxFiles = parseInt(fileInput.getAttribute("data-max-files"), 10);
+      var total = 0;
+      Array.prototype.forEach.call(fileInput.files, function (f) { total += f.size; });
+      var message = "";
+      if (fileInput.files.length > maxFiles) message = "Please attach up to " + maxFiles + " files.";
+      else if (total > max * 0.95) message = "These files add up to more than " + Math.floor(max / 1048576) +
+        " MB. Attach fewer or smaller files, or email them to us after sending the form.";
+      fileInput.setCustomValidity(message);
+      if (message) fileInput.reportValidity();
+    });
+  }
 })();

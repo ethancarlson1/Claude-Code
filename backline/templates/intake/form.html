@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf %}
+{% block title %}Request a quote{% endblock %}
+{% block body_class %}intake-page{% endblock %}
+
+{% macro question(q, values, errors) %}
+  {% set value = values.get(q.name) %}
+  {% set error = errors.get(q.name) %}
+  {% if q.kind == 'chips' %}
+    <div class="field{% if q.wide %} wide{% endif %}{% if error %} has-error{% endif %}" role="group" aria-labelledby="q-{{ q.name }}-label">
+      <div class="group-label" id="q-{{ q.name }}-label">{{ q.label }}</div>
+      <div class="chips">
+        {% for choice in q.options() %}
+          {% set on = (choice in value) if q.multiple and value else (choice == value) %}
+          <label class="chip"><input type="{{ 'checkbox' if q.multiple else 'radio' }}" name="{{ q.name }}" value="{{ choice }}" {% if on %}checked{% endif %}><span>{{ choice }}</span></label>
+        {% endfor %}
+      </div>
+      {% if error %}<div class="error">{{ error }}</div>{% elif q.hint %}<div class="help">{{ q.hint }}</div>{% endif %}
+    </div>
+  {% else %}
+    <div class="field{% if q.wide %} wide{% endif %}{% if error %} has-error{% endif %}">
+      <label for="q-{{ q.name }}">{{ q.label }}</label>
+      {% if q.kind == 'textarea' %}
+        <textarea id="q-{{ q.name }}" name="{{ q.name }}" rows="{{ q.rows }}" maxlength="4000"{% if q.placeholder %} placeholder="{{ q.placeholder }}"{% endif %}>{{ value or '' }}</textarea>
+      {% elif q.kind == 'select' %}
+        <select id="q-{{ q.name }}" name="{{ q.name }}">
+          <option value="">Choose, or skip</option>
+          {% for choice in q.options() %}<option value="{{ choice }}" {% if choice == value %}selected{% endif %}>{{ choice }}</option>{% endfor %}
+        </select>
+      {% else %}
+        <input id="q-{{ q.name }}" name="{{ q.name }}" maxlength="300"
+          type="{{ {'email': 'email', 'tel': 'tel', 'date': 'date', 'time': 'time'}.get(q.kind, 'text') }}"
+          value="{{ value if value is not none else '' }}"
+          {% if q.kind == 'int' %}inputmode="numeric"{% endif %}
+          {% if q.autocomplete %}autocomplete="{{ q.autocomplete }}"{% endif %}
+          {% if q.placeholder %}placeholder="{{ q.placeholder }}"{% endif %}
+          {% if q.name == 'name' %}required{% endif %}>
+      {% endif %}
+      {% if error %}<div class="error">{{ error }}</div>{% elif q.hint %}<div class="help">{{ q.hint }}</div>{% endif %}
+    </div>
+  {% endif %}
+{% endmacro %}
+
+{% block shell %}
+<main class="intake">
+  <header class="intake-head">
+    <div class="auth-logo"><img src="{{ logo_url }}" alt="{{ company_name }}"></div>
+    <h1>Tell us about your event</h1>
+    <p>Share what you know and we'll put together a quote. Only your name and a way to reach you are required.
+      <strong>Skip anything you're not sure about</strong>: a rough idea is plenty, and we'll follow up with questions.</p>
+  </header>
+  {% if errors %}
+    <div class="alert-box">{{ errors._form or 'Please check the highlighted ' ~ ('answer' if errors|length == 1 else 'answers') ~ ' below.' }}</div>
+  {% endif %}
+  <p class="restore-note" data-restore-note hidden>We filled in what you entered earlier on this device. <button type="button" class="link" data-clear-form>Start over</button></p>
+  <form method="post" enctype="multipart/form-data" data-autosave="event-request" data-fresh="{{ '1' if fresh else '0' }}">
+    {{ csrf() }}
+    <div class="hp" aria-hidden="true"><label for="website">Leave this empty</label><input id="website" name="website" tabindex="-1" autocomplete="off"></div>
+    <div class="stack">
+    {% for key, title, hint, questions in sections %}
+      <section class="card" id="section-{{ key }}">
+        <h2><span class="step">{{ loop.index }}</span> {{ title }}</h2>
+        {% if hint %}<p class="help">{{ hint }}</p>{% endif %}
+        <div class="grid-form">
+          {% for q in questions %}{{ question(q, values, errors) }}{% endfor %}
+          {% if key == 'extra' %}
+          <div class="field wide">
+            <label for="q-files">Attach files</label>
+            <input id="q-files" type="file" name="files" multiple accept="{{ accept }}" data-max-bytes="{{ max_bytes }}" data-max-files="{{ max_files }}">
+            <div class="help">Stage plot, input list, rider, floor plan, schedule, photos of the space… PDFs, Word and Excel files and photos all work.</div>
+          </div>
+          {% endif %}
+        </div>
+      </section>
+    {% endfor %}
+    </div>
+    <div class="intake-submit">
+      <button class="btn btn-primary btn-big" type="submit">Send request</button>
+      <p class="help" style="margin-top:.6rem">We'll only use your details to reply about this event.</p>
+    </div>
+  </form>
+</main>
+{% endblock %}

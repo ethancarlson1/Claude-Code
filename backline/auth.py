@@ -21,7 +21,7 @@ bp = Blueprint("auth", __name__)
 
 # Endpoints reachable without logging in. Public pages are protected by
 # unguessable per-record keys instead.
-PUBLIC_BLUEPRINTS = {"auth", "public"}
+PUBLIC_BLUEPRINTS = {"auth", "public", "intake"}  # intake: the public event request form
 
 
 def csrf_token():
@@ -117,4 +117,5 @@ def init_app(app):
             "company_name": db.get_setting("company_name"),
             "current_user": g.get("user"),
             "logo_url": url_for("public.logo", v=db.get_setting("logo_file") or "default"),
+            "new_requests": db.scalar("SELECT COUNT(*) FROM client_requests WHERE status = 'new'") if g.get("user") else 0,
         }

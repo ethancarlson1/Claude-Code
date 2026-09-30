@@ -183,6 +183,9 @@ def status_class(status):
         "expiring": "warn",
         "maintenance": "warn",
         "retired": "muted",
+        "new": "info",          # event requests
+        "converted": "ok",
+        "archived": "muted",
     }.get(status, "muted")
 
 

@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Request a quote{% endblock %}
+{% block body_class %}intake-page{% endblock %}
+{% block shell %}
+<main class="intake">
+  <section class="card intake-done">
+    <div class="auth-logo" style="max-width:230px"><img src="{{ logo_url }}" alt="{{ company_name }}"></div>
+    <h1>Let's talk about your event</h1>
+    <p>We're not taking requests online right now.{% if settings.company_phone or settings.company_email %} Please reach us directly:{% endif %}</p>
+    {% if settings.company_phone %}<p><a class="btn" href="tel:{{ settings.company_phone }}">Call {{ settings.company_phone }}</a></p>{% endif %}
+    {% if settings.company_email %}<p><a class="btn" href="mailto:{{ settings.company_email }}">Email {{ settings.company_email }}</a></p>{% endif %}
+  </section>
+</main>
+{% endblock %}

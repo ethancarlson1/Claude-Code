@@ -68,16 +68,19 @@ def create_app(test_config=None):
         crewpay,
         dashboard,
         events,
+        intake,
         inventory,
         invoices,
         people,
         public,
         quickbooks,
+        requests,
         settings,
     )
 
     auth.init_app(app)
-    for module in (dashboard, events, inventory, people, contracts, invoices, crewpay, public, settings, quickbooks):
+    for module in (dashboard, events, inventory, people, contracts, invoices, crewpay, public, settings, quickbooks,
+                   intake, requests):
         app.register_blueprint(module.bp)
 
     with app.app_context():

@@ -113,13 +113,17 @@ def index():
         if services.deposit_status(k, money["deposit_received_on"]) == "overdue":
             deposits_overdue.append(k)
 
+    new_requests = db.query(
+        "SELECT * FROM client_requests WHERE status = 'new' ORDER BY created_at DESC, id DESC LIMIT 5"
+    )
+
     qbo_problems = db.query(
         "SELECT id, number, qbo_error FROM invoices WHERE qbo_error IS NOT NULL AND qbo_error != '' "
         "ORDER BY id DESC LIMIT 10"
     )
 
     return render_template(
-        "dashboard.html", qbo_problem=db.get_setting("qbo_last_error"), qbo_problems=qbo_problems, crew_pay=crew_pay, crew_overdue=crew_overdue, deposits_overdue=deposits_overdue,
+        "dashboard.html", new_request_rows=new_requests, qbo_problem=db.get_setting("qbo_last_error"), qbo_problems=qbo_problems, crew_pay=crew_pay, crew_overdue=crew_overdue, deposits_overdue=deposits_overdue,
         vehicle_conflicts=vehicle_conflicts, paperwork=paperwork,
         upcoming=upcoming, events_30=events_30, shortages=shortages, attention=attention,
         not_returned=not_returned, unsigned=unsigned, maintenance=maintenance,

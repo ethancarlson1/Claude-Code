@@ -119,6 +119,37 @@ Crew can accept or decline the call from the page. The office copy of the worksh
 
 Contracts, invoices and worksheets all print cleanly and can be saved as PDF from the browser. Other features: multiple users, CSRF protection, and "Email" buttons that open your mail app with the link already written in.
 
+## Event request form
+
+A public page where clients tell you about their event, at **/request** on your site (for example `https://your-site/request`). Share the link from **Requests** in the sidebar: copy it, email it, or add it to your website as a link or button. Don't embed it inside another site's page; it needs to open on its own.
+
+**For the client**
+- Only their name and an email or phone number are required. Every other question can be skipped, and the form says so up front.
+- Most answers are one tap: event type, indoors or outdoors, stage and power, how gear gets in, what they need and whether they want a tech on site. Numbers can be rough ("about 150").
+- It covers:
+  - contact details
+  - the event: description, type, date, head count, who's speaking or performing
+  - location and layout: venue, address, stage, power, venue contact
+  - load-in and parking: access, earliest arrival, out-by time
+  - the timeline and schedule
+  - equipment needs, microphones and specific requests
+  - day-of and planner contacts, budget
+  - file uploads: stage plots, input lists, riders, floor plans, photos
+- What they type is saved on their device as they go, so a closed tab or dropped connection doesn't lose it. Uploads that are too big are caught before sending.
+- It works on phones, and in light and dark mode.
+
+**For the office**
+- New requests appear under **Requests** (with a count in the sidebar) and on the dashboard.
+- **Create inquiry** turns a request into an event in one step:
+  - It matches an existing client (by email, phone or name) and venue, or creates new ones.
+  - It fills in the head count, setting, service, times, schedule, parking and load-in directions, audio needs, power and day-of contact.
+  - It applies the event type's checklists, and puts the rest (description, layout, budget, planner, notes) in the office notes.
+  - Attached files move to the event's Documents, office-only until you share them with crew.
+  - The event starts as an **inquiry**, so it doesn't reserve gear.
+- **Add to an existing event** fills in only what the event is missing. Answers that differ from what you already entered go into the office notes instead of overwriting them.
+- Archive requests you won't take on; delete spam. The form can be turned off, in which case the link shows your phone and email instead.
+- Spam protection: a hidden field that only bots fill in, and a limit of 5 requests per hour from one network.
+
 ## QuickBooks Online
 
 Connect your QuickBooks Online company under **Settings → QuickBooks**. Nothing is sent to QuickBooks until you do.
@@ -197,6 +228,8 @@ The demo data is dated relative to today:
 | Blue Door Showcase | Club / Bar Show | Past show: overdue invoice, cymbal pack never returned, one tech paid by Zelle and one still owed |
 | Lakeview Youth Arts Spring Gala | Fundraiser / Gala | Inquiry awaiting a quote |
 
+It also has two event requests waiting under **Requests**: a detailed one with a floor plan attached, and one where the client skipped most questions.
+
 All demo people, venues, phone numbers (555-01xx) and emails are fictional.
 
 Other commands:
@@ -246,6 +279,7 @@ The suite covers:
 - vehicles and transport: fleet management, company and third-party vehicles on events, double-booking and maintenance warnings, expiring paperwork, and the worksheet section
 - documents: upload, download (inline vs. attachment), rejecting unsafe or empty files, crew seeing only shared files, cleanup when files or events are deleted, and the friendly "too large" message
 - branding: the logo on every page, replacing and resetting it from Settings, and rejecting files that aren't real images
+- the event request form: only name and contact required, forgiving answers, keeping answers on errors, spam protection, uploads, turning it off, the inbox, creating an inquiry (client/venue matching, every mapped field, checklists, files), adding to an existing event without overwriting, archiving and deleting
 - QuickBooks, against an in-memory stand-in for QuickBooks (tests never touch the network):
   - connecting, and refusing sign-ins that didn't start in this browser
   - customers and invoices (lines, tax flags, discount, deposits), edits and voids
@@ -271,9 +305,11 @@ backline/
   services.py        gear and vehicle availability, totals, invoice math, crew pay, contract rendering, iCal export
   files.py           event document storage (uploads folder, allowed types, downloads)
   quickbooks.py      QuickBooks Online: sign-in, sending invoices and payments, bringing payments back
+  intake.py          the event request form: questions, reading answers, turning a request into an event
   seed.py            Chicago demo data
   views/             dashboard, events (crew/gear/checklists/chat/calendar), inventory,
                      people (clients/venues/crew), contracts, invoices, crewpay, settings, quickbooks,
+                     requests (the office inbox), intake (the public request form),
                      public (crew worksheets, contract signing, client invoices)
   templates/, static/ (static/brand/ holds the logo and icons)
 tests/

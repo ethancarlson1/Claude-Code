@@ -3,9 +3,10 @@ Chicago-area venues and a few weeks of bookings. Dates are relative to today
 so the demo always looks current. People, venues, phone numbers (555-01xx)
 and emails are fictional placeholders."""
 
+import json
 from datetime import datetime, timedelta
 
-from . import db, files, services, util
+from . import db, files, intake, services, util
 
 INVENTORY = [
     # name, category, make, model, qty, rate/day, replacement value, location
@@ -586,3 +587,47 @@ def seed():
            client_id=client["Lakeview Youth Arts Fund"], event_date=day(45), guest_count=300,
            service_type="Full production (PA, backline, crew)",
            notes="Asked for a quote: podium + 4 wireless for speakers and the auctioneer, jazz trio backline, dance set.")
+
+    _seed_requests(day)
+
+
+def _seed_requests(day):
+    """Two event requests from the public form: one detailed, one with most answers skipped."""
+    now = datetime.now()
+    detailed = {
+        "name": "Grace Okafor", "organization": "Brightline Analytics", "email": "grace.okafor@example.com",
+        "phone": "(312) 555-0177",
+        "description": "Our summer party on a rooftop: drinks, a DJ, and a short welcome from our CEO.",
+        "event_type": "Private Party", "event_name": "Brightline Summer Rooftop Party", "event_date": day(38),
+        "attendance": 180, "setting": "Outdoors", "performers": "A DJ, plus a 5-minute welcome from our CEO",
+        "venue_name": "Kinzie Rooftop Terrace", "venue_address": "River North, Chicago",
+        "layout": "Open rooftop deck. The bar is on the north side; the DJ goes in the corner with the skyline "
+                  "behind them, and the CEO speaks from the same spot around 7.",
+        "stage": "No", "power": intake.NOT_SURE, "venue_contact": "Evan (building events), (312) 555-0181",
+        "access": ["Loading dock", "Elevator"], "load_in_time": "14:00", "load_out_time": "23:30",
+        "load_in_notes": "The freight elevator from the alley dock has to be reserved with the building.",
+        "parking": "30-minute loading zone in the alley, then the garage next door.",
+        "doors_time": "17:30", "start_time": "18:00", "end_time": "22:00",
+        "schedule": "5:30 Guests arrive\n7:00 CEO welcome and toast\n7:10 DJ until 10",
+        "needs": [intake.SPEAKERS, intake.WIRELESS, intake.DJ, intake.PLAYBACK], "tech": intake.TECH_ON_SITE,
+        "mic_count": 2, "gear_details": "The DJ brings a controller. We need a wireless handheld for the toast.",
+        "budget": "Around $2,000", "notes": "It can get windy up there.",
+    }
+    minimal = {
+        "name": "Dev Patel", "phone": "(773) 555-0163", "attendance": 120,
+        "description": "Looking for speakers and a couple of mics for my daughter's quinceañera in the spring. "
+                       "We haven't picked a venue yet.",
+    }
+    for answers, hours_ago in ((detailed, 3), (minimal, 27)):
+        request_id = db.insert("client_requests", {
+            "name": answers["name"], "organization": answers.get("organization"), "email": answers.get("email"),
+            "phone": answers.get("phone"), "event_date": answers.get("event_date"),
+            "event_type": answers.get("event_type"), "answers": json.dumps(answers), "ip": "demo",
+            "created_at": (now - timedelta(hours=hours_ago)).isoformat(timespec="seconds"),
+        })
+        if answers is detailed:
+            original, stored, size = files.store_upload("Rooftop floor plan.pdf", _pdf(
+                "Kinzie Rooftop Terrace - Floor Plan", ["Freight elevator opens onto the east side of the deck."],
+                boxes=[(80, 460, 160, 60, "Bar"), (380, 460, 150, 80, "DJ corner"), (240, 330, 120, 40, "Elevator")]))
+            db.insert("client_request_files", {"request_id": request_id, "original_name": original,
+                                               "stored_name": stored, "size": size})

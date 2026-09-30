@@ -361,6 +361,14 @@ def invoice_status(invoice, totals=None):
     return "sent"
 
 
+def unique_reference(event_date, client_name, title):
+    """A readable event reference number that isn't taken yet."""
+    while True:
+        ref = util.gen_reference(event_date, client_name, title)
+        if not db.scalar("SELECT 1 FROM events WHERE reference_number = ?", (ref,)):
+            return ref
+
+
 def next_number(table, prefix):
     year = util.today().year
     base = f"{prefix}{year}-"

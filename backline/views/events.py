@@ -267,10 +267,7 @@ def new():
 
 
 def _unique_reference(event_date, client_name, title):
-    while True:
-        ref = util.gen_reference(event_date, client_name, title)
-        if not db.scalar("SELECT 1 FROM events WHERE reference_number = ?", (ref,)):
-            return ref
+    return services.unique_reference(event_date, client_name, title)
 
 
 @bp.route("/events/<int:event_id>/edit", methods=["GET", "POST"])

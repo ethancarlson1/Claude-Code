@@ -154,7 +154,7 @@ def test_old_database_is_migrated(tmp_path):
         assert "qbo_customer_id" in {r[1] for r in dbm.query("PRAGMA table_info(clients)")}
         assert dbm.scalar("SELECT name FROM sqlite_master WHERE name = 'idx_payments_qbo'")
         tables = {r[0] for r in dbm.query("SELECT name FROM sqlite_master WHERE type = 'table'")}
-        assert {"vehicles", "event_vehicles", "event_files"} <= tables
+        assert {"vehicles", "event_vehicles", "event_files", "client_requests", "client_request_files"} <= tables
         assert dbm.get_setting("company_name") == "Chicago Sound and Backline"
         event = dbm.query("SELECT title, event_type FROM events", one=True)
         assert (event["title"], event["event_type"]) == ("Old gig", "Live Concert")

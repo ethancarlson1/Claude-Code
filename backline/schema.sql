@@ -329,3 +329,31 @@ CREATE TABLE IF NOT EXISTS payments (
     qbo_payment_id TEXT,                         -- the same payment in QuickBooks
     qbo_imported INTEGER NOT NULL DEFAULT 0      -- 1 = recorded in QuickBooks, not here
 );
+
+-- Event requests sent in through the public request form (/request).
+CREATE TABLE IF NOT EXISTS client_requests (
+    id INTEGER PRIMARY KEY,
+    status TEXT NOT NULL DEFAULT 'new',          -- new | converted | archived
+    name TEXT NOT NULL,
+    organization TEXT,
+    email TEXT,
+    phone TEXT,
+    event_date TEXT,
+    event_type TEXT,
+    answers TEXT NOT NULL,                       -- every answer, as JSON (see intake.py)
+    event_id INTEGER REFERENCES events(id) ON DELETE SET NULL,  -- the event it became or was added to
+    ip TEXT,
+    created_at TEXT NOT NULL,
+    handled_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_client_requests_status ON client_requests(status, created_at);
+
+-- Files attached to a request. They move to the event's documents when the
+-- request becomes (or is added to) an event.
+CREATE TABLE IF NOT EXISTS client_request_files (
+    id INTEGER PRIMARY KEY,
+    request_id INTEGER NOT NULL REFERENCES client_requests(id) ON DELETE CASCADE,
+    original_name TEXT NOT NULL,
+    stored_name TEXT NOT NULL UNIQUE,
+    size INTEGER NOT NULL DEFAULT 0
+);

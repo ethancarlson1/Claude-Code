@@ -105,7 +105,8 @@ def test_every_page_renders_with_demo_data(seeded, app):
              "/crew", "/clients", "/venues", "/crew/1", "/clients/1", "/venues/1", "/contracts", "/contracts/new",
              "/invoices", "/invoices/new", "/settings", "/settings/checklists", "/settings/checklists/1", "/settings/users",
              "/settings/event-types", "/crew-pay", "/crew-pay?status=all", "/crew-pay?status=paid",
-             "/crew-pay?status=upcoming", "/crew-pay/export.csv"]
+             "/crew-pay?status=upcoming", "/crew-pay/export.csv", "/settings/quickbooks", "/requests",
+             "/requests?status=all", "/requests/1", "/requests/2", "/requests/1/convert", "/request", "/request/thanks"]
     for e in events:
         pages += [f"/events/{e}?tab={t}" for t in ("overview", "crew", "gear", "transport", "checklist", "chat",
                                                     "documents")]

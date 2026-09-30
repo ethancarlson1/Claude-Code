@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf, copy_link, empty, badge %}
+{% block title %}Requests{% endblock %}
+{% block heading %}<h1>Event requests</h1><div class="sub">Sent in by clients through your request form</div>{% endblock %}
+{% block actions %}<a class="btn" href="{{ url_for('intake.form') }}" target="_blank" rel="noopener">Open the form</a>{% endblock %}
+{% block content %}
+<section class="card">
+  <div class="card-head">
+    <h2>Your request form</h2>
+    <form method="post" action="{{ url_for('requests.toggle_form') }}" class="inline">
+      {{ csrf() }}<input type="hidden" name="enabled" value="{{ '0' if enabled else '1' }}">
+      {% if enabled %}<span class="badge badge-ok">On</span> <button class="link small" type="submit">Turn off</button>
+      {% else %}<span class="badge badge-muted">Off</span> <button class="link small" type="submit">Turn on</button>{% endif %}
+    </form>
+  </div>
+  <p class="small">Put this link on your website or send it to clients. They can fill in what they know and skip the rest; new requests show up here.</p>
+  {{ copy_link(url_for('intake.form', _external=True)) }}
+  {% set link = url_for('intake.form', _external=True) %}
+  <p style="margin-top:.6rem"><a class="btn btn-small" href="{{ mailto('', 'Tell us about your event', 'Hi,\n\nTo help us put together a quote, please tell us what you know about your event here. Skip anything you are not sure about:\n' ~ link ~ '\n\nThank you!\n' ~ company_name) }}">Email the link</a></p>
+</section>
+
+<nav class="tabs">
+  {% for key, label in statuses %}
+    <a href="{{ url_for('requests.index', status=key) }}" class="{{ 'active' if key == status }}">{{ label }}{% if key != 'all' and counts.get(key) %}<span class="count">{{ counts[key] }}</span>{% endif %}</a>
+  {% endfor %}
+</nav>
+<div class="card">
+  {% if rows %}
+  <div class="table-wrap"><table>
+    <thead><tr><th>Received</th><th>From</th><th>Event</th><th>Date</th><th class="num">People</th><th>Where</th>{% if status != 'new' %}<th>Status</th>{% endif %}</tr></thead>
+    <tbody>
+    {% for r, a in rows %}
+      <tr>
+        <td class="nowrap">{{ r.created_at|fdatetime }}</td>
+        <td><a href="{{ url_for('requests.detail', request_id=r.id) }}"><strong>{{ r.name }}</strong></a>{% if r.organization %}<div class="small muted">{{ r.organization }}</div>{% endif %}</td>
+        <td>{{ a.event_name or a.event_type or '—' }}{% if a.description %}<div class="small muted">{{ a.description|truncate(90) }}</div>{% endif %}{% if r.file_count %}<div class="small muted">{{ r.file_count }} file{{ 's' if r.file_count != 1 }} attached</div>{% endif %}</td>
+        <td class="nowrap">{{ r.event_date|fdate('short') if r.event_date else '—' }}</td>
+        <td class="num">{{ a.attendance or '—' }}</td>
+        <td>{{ a.venue_name or '—' }}</td>
+        {% if status != 'new' %}<td>{% if r.status == 'converted' and r.event_id %}<a href="{{ url_for('events.detail', event_id=r.event_id) }}">{{ r.event_title }}</a>{% else %}{{ badge(r.status) }}{% endif %}</td>{% endif %}
+      </tr>
+    {% endfor %}
+    </tbody></table></div>
+  {% else %}
+    {{ empty('No new requests. Share your form link and they’ll show up here.' if status == 'new' else 'Nothing here.') }}
+  {% endif %}
+</div>
+{% endblock %}
