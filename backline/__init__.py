@@ -57,13 +57,14 @@ def create_app(test_config=None):
 
     @app.errorhandler(413)
     def too_large(_error):
-        limit = app.config["MAX_CONTENT_LENGTH"] // (1024 * 1024)
+        limit = (request.max_content_length or app.config["MAX_CONTENT_LENGTH"]) // (1024 * 1024)
         flash(f"That upload is too large. The limit is {limit} MB at a time; try fewer or smaller files.", "bad")
         back = request.referrer or "/"
         return redirect(back if back.startswith(request.host_url) else "/")
 
     from . import auth
     from .views import (
+        backups,
         contracts,
         crewpay,
         dashboard,
@@ -80,7 +81,7 @@ def create_app(test_config=None):
 
     auth.init_app(app)
     for module in (dashboard, events, inventory, people, contracts, invoices, crewpay, public, settings, quickbooks,
-                   intake, requests):
+                   intake, requests, backups):
         app.register_blueprint(module.bp)
 
     with app.app_context():

@@ -252,6 +252,19 @@ def users():
             else:
                 db.update("users", me["id"], {"password_hash": generate_password_hash(new)})
                 flash("Password changed.", "ok")
+        elif action == "reset":
+            user_id = request.form.get("user_id", type=int)
+            new = request.form.get("new_password", "")
+            target = db.query("SELECT * FROM users WHERE id = ?", (user_id,), one=True)
+            if target is None or user_id == g.user["id"]:
+                abort(400)
+            if len(new) < 8:
+                flash("New password must be at least 8 characters.", "bad")
+            else:
+                db.update("users", user_id, {"password_hash": generate_password_hash(new)})
+                db.execute("DELETE FROM login_failures WHERE lower(username) = lower(?)", (target["username"],))
+                flash(f"Set a new password for {target['username']}. Let them know it, and suggest they change it "
+                      "under Settings → Users.", "ok")
         elif action == "delete":
             user_id = request.form.get("user_id", type=int)
             if user_id == g.user["id"]:

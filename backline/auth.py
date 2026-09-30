@@ -1,5 +1,7 @@
 import hmac
+import os
 import secrets
+from datetime import datetime, timedelta
 
 from flask import (
     Blueprint,
@@ -15,9 +17,17 @@ from flask import (
 )
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from . import db
+from . import db, util
 
 bp = Blueprint("auth", __name__)
+
+# Sign-in lockout: this many wrong passwords within LOCK_MINUTES, for one
+# username from one network (or for any usernames from one network).
+LOCK_AFTER = 5
+LOCK_AFTER_NETWORK = 20
+LOCK_MINUTES = 15
+# Endpoints that accept bigger uploads than MAX_CONTENT_LENGTH (restoring a backup).
+BIG_UPLOADS = {"backups.restore": int(os.environ.get("BACKLINE_MAX_RESTORE_MB", "500")) * 1024 * 1024}
 
 # Endpoints reachable without logging in. Public pages are protected by
 # unguessable per-record keys instead.
@@ -40,6 +50,8 @@ def _check_csrf():
 
 
 def _gate():
+    if request.endpoint in BIG_UPLOADS:
+        request.max_content_length = BIG_UPLOADS[request.endpoint]  # before the form is read
     if request.method == "POST":
         _check_csrf()
     if request.endpoint is None or request.endpoint == "static":
@@ -55,6 +67,12 @@ def _gate():
     return None
 
 
+def setup_code():
+    """On a public server, the first account needs a code only the owner can see
+    (set as BACKLINE_SETUP_CODE), so a stranger can't create it first."""
+    return os.environ.get("BACKLINE_SETUP_CODE", "").strip()
+
+
 @bp.route("/setup", methods=["GET", "POST"])
 def setup():
     if db.scalar("SELECT COUNT(*) FROM users") > 0:
@@ -64,7 +82,11 @@ def setup():
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
         company = request.form.get("company_name", "").strip()
-        if not username or len(password) < 8:
+        code = setup_code()
+        if code and not hmac.compare_digest(request.form.get("setup_code", "").strip(), code):
+            error = ("That setup code doesn't match. Copy BACKLINE_SETUP_CODE from your Render service's "
+                     "Environment page.")
+        elif not username or len(password) < 8:
             error = "Choose a username and a password of at least 8 characters."
         else:
             user_id = db.insert(
@@ -77,7 +99,21 @@ def setup():
             session["user_id"] = user_id
             flash("Welcome! Your account is ready.", "ok")
             return redirect(url_for("dashboard.index"))
-    return render_template("auth/setup.html", error=error)
+    return render_template("auth/setup.html", error=error, needs_code=bool(setup_code()))
+
+
+def _locked_out(username, ip):
+    since = (datetime.now() - timedelta(minutes=LOCK_MINUTES)).isoformat(timespec="seconds")
+    same_user = db.scalar("SELECT COUNT(*) FROM login_failures WHERE ip IS ? AND lower(username) = lower(?) AND at >= ?",
+                          (ip, username, since))
+    same_network = db.scalar("SELECT COUNT(*) FROM login_failures WHERE ip IS ? AND at >= ?", (ip, since))
+    return same_user >= LOCK_AFTER or same_network >= LOCK_AFTER_NETWORK
+
+
+def _record_failure(username, ip):
+    db.insert("login_failures", {"username": username[:100], "ip": ip, "at": util.now_iso()})
+    old = (datetime.now() - timedelta(days=1)).isoformat(timespec="seconds")
+    db.execute("DELETE FROM login_failures WHERE at < ?", (old,))
 
 
 @bp.route("/login", methods=["GET", "POST"])
@@ -86,10 +122,16 @@ def login():
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
+        ip = request.remote_addr
+        if _locked_out(username, ip):
+            error = f"Too many wrong passwords. Wait {LOCK_MINUTES} minutes, then try again."
+            return render_template("auth/login.html", error=error), 429
         user = db.query("SELECT * FROM users WHERE username = ?", (username,), one=True)
         if user is None or not check_password_hash(user["password_hash"], password):
+            _record_failure(username, ip)
             error = "Incorrect username or password."
         else:
+            db.execute("DELETE FROM login_failures WHERE ip IS ? AND lower(username) = lower(?)", (ip, username))
             session.clear()
             session["user_id"] = user["id"]
             target = request.args.get("next", "")

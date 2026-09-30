@@ -358,3 +358,12 @@ CREATE TABLE IF NOT EXISTS client_request_files (
     stored_name TEXT NOT NULL UNIQUE,
     size INTEGER NOT NULL DEFAULT 0
 );
+
+-- Wrong passwords at sign-in, used to slow down password guessing.
+CREATE TABLE IF NOT EXISTS login_failures (
+    id INTEGER PRIMARY KEY,
+    username TEXT NOT NULL,
+    ip TEXT,
+    at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_login_failures ON login_failures(ip, at);

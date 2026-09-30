@@ -180,7 +180,7 @@ Connect your QuickBooks Online company under **Settings → QuickBooks**. Nothin
 6. When you're ready for your real books:
    - Switch the environment to **Production** and enter the production keys.
    - Connect your real company.
-   - Production keys need the platform online at an https address (see *Running it for real*).
+   - Production keys need the platform online at an https address (see *Going live on Render*).
 
    Connecting to a different company clears links to the old one, including practice payments that came from the sandbox.
 
@@ -241,26 +241,70 @@ flask --app backline init-db                  # create/upgrade tables (also runs
 
 Upgrading an existing database needs no extra step. On startup, new columns are added and the new default checklists and event types are filled in once. Old type names like "Concert" map to their new equivalents. A database still using the old placeholder company name is renamed to Chicago Sound and Backline.
 
-## Running it for real
+## Going live on Render
 
-Crew and clients open links from their phones, so host it somewhere reachable over **HTTPS**. For example, a small VPS behind Caddy or nginx, or any platform that runs a Python web app:
+Render runs the platform online at an https address, keeps its database and uploaded files on a disk that survives updates, and copies that disk every day. The `render.yaml` file in this repository sets everything up.
+
+**Cost:** the Starter instance (about $7 a month) plus a 1 GB disk (about $0.25 a month). A free Render account works, but the platform can't run on Render's *free instance*: free instances can't have a disk, so every restart or update would erase your bookings. Check Render's pricing page for current prices.
+
+**1. Get the code onto the branch Render will use.** Render deploys from a GitHub branch. Use `main`, and merge the work you want live into it through a pull request. After that, every merge to `main` updates the live site automatically, with about a minute of downtime.
+
+**2. Create the service from the Blueprint.**
+1. In the Render dashboard: **New → Blueprint**.
+2. Connect your GitHub account if asked, and give Render access to this repository.
+3. Pick the repository and the `main` branch. Render reads `render.yaml` and shows one web service, **chicago-sound-backline** (Starter, Ohio region, 1 GB disk).
+4. Click **Apply**. Render asks for a payment method for the Starter instance.
+5. Wait for the first deploy to finish (a few minutes). Its status changes to **Live**, and its address appears at the top, like `https://chicago-sound-backline.onrender.com`.
+
+**3. Create your admin account.** In the service, open **Environment**, show the value of `BACKLINE_SETUP_CODE`, and copy it. Then open your site's address. The setup page asks for that code before it creates the first account, so a stranger who finds the new site can't take it over.
+
+**4. Bring your data, or start fresh.**
+- **Starting fresh:** go to **Settings** and fill in company details, the logo, users, event types and checklists.
+- **Moving from your computer:**
+  1. On your computer's copy: **Settings → Backup → Download backup**.
+  2. On the Render site, before entering any bookings: **Settings → Backup → Restore** with that file.
+  3. Sign in again with a username and password from your computer's copy.
+
+  Restoring only works on a platform with no bookings yet, so it can never overwrite live data.
+
+**5. Use your own domain (optional).**
+1. In the service, go to **Settings → Custom Domains** and add something like `ops.yourdomain.com`.
+2. At your domain provider, add the CNAME record Render shows (pointing to `chicago-sound-backline.onrender.com`).
+
+Render sets up the https certificate. Then link your website's "Request a quote" button to `https://ops.yourdomain.com/request`.
+
+**6. Connect QuickBooks (optional).** In your Intuit app, add the Redirect URI shown under **Settings → QuickBooks** on the live site. Use the production keys, switch the environment to **Production**, and connect. See *QuickBooks Online* above.
+
+**Day to day**
+- **Backups:** Render snapshots the disk daily and keeps snapshots at least a week. Also download a backup from **Settings → Backup** now and then, and keep it somewhere safe.
+- **Forgotten passwords:** anyone signed in can set a new password for another user under **Settings → Users**. If nobody can sign in, open the service's **Shell** in Render and run `flask --app backline reset-password <username>`.
+- **Sign-in protection:** after 5 wrong passwords for one username from one network (or 20 for any usernames), sign-in from that network pauses for 15 minutes.
+- **Logs:** the service's **Logs** tab shows what the platform is doing, which helps when something goes wrong.
+
+## Running it elsewhere
+
+Any host that runs a Python web app over https and keeps files between restarts works. The platform needs somewhere to keep its SQLite database and uploads. For example, on a small server behind Caddy or nginx:
 
 ```bash
-pip install waitress
-BACKLINE_SECRET_KEY=... BACKLINE_DATABASE=/srv/backline/backline.sqlite3 BACKLINE_BEHIND_PROXY=1 \
-  waitress-serve --port 8000 --call backline:create_app
+pip install -r requirements.txt
+BACKLINE_SECRET_KEY=... BACKLINE_DATABASE=/srv/backline/backline.sqlite3 BACKLINE_UPLOADS=/srv/backline/uploads \
+  BACKLINE_BEHIND_PROXY=1 waitress-serve --port 8000 --no-clear-untrusted-proxy-headers --call backline:create_app
 ```
+
+`--no-clear-untrusted-proxy-headers` lets the proxy's `X-Forwarded-*` headers reach the app, so its links and cookies use https.
 
 | Variable | Purpose |
 | --- | --- |
 | `BACKLINE_SECRET_KEY` | Session signing key. If unset, one is generated and saved in `instance/secret_key`. |
 | `BACKLINE_DATABASE` | Path to the SQLite file. Default: `instance/backline.sqlite3`. |
-| `BACKLINE_BEHIND_PROXY` | Set when running behind a reverse proxy. Trusts `X-Forwarded-*` headers and marks cookies Secure. |
 | `BACKLINE_UPLOADS` | Folder for uploaded event documents. Default: `instance/uploads`. |
+| `BACKLINE_BEHIND_PROXY` | Set when running behind a reverse proxy. Trusts the last `X-Forwarded-*` values and marks cookies Secure. |
+| `BACKLINE_SETUP_CODE` | Recommended on a public server. The code needed to create the first account. |
 | `BACKLINE_MAX_UPLOAD_MB` | Largest upload accepted at once, in MB. Default: 50. |
+| `BACKLINE_MAX_RESTORE_MB` | Largest backup that can be restored, in MB. Default: 500. |
 | `BACKLINE_QBO_CLIENT_ID`, `BACKLINE_QBO_CLIENT_SECRET` | Optional. Your Intuit app's keys, instead of entering them under Settings → QuickBooks. |
 
-**Backups:** your data lives in the SQLite database file, and uploaded documents live in the `uploads` folder. Back up both on a schedule. The database also holds the QuickBooks sign-in when connected, so keep backups private. The simplest way is to copy the whole `instance` folder, or run `sqlite3 backline.sqlite3 ".backup backup.sqlite3"` for the database.
+**Backups:** **Settings → Backup → Download backup** saves the database and every uploaded file in one .zip. The database also holds the QuickBooks sign-in when connected, so keep backups private.
 
 ## Tests
 
@@ -280,6 +324,7 @@ The suite covers:
 - documents: upload, download (inline vs. attachment), rejecting unsafe or empty files, crew seeing only shared files, cleanup when files or events are deleted, and the friendly "too large" message
 - branding: the logo on every page, replacing and resetting it from Settings, and rejecting files that aren't real images
 - the event request form: only name and contact required, forgiving answers, keeping answers on errors, spam protection, uploads, turning it off, the inbox, creating an inquiry (client/venue matching, every mapped field, checklists, files), adding to an existing event without overwriting, archiving and deleting
+- going live: the health check, https links and Secure cookies behind a proxy, the setup code, sign-in lockout, password resets (in Settings and from the command line), backups, and restoring only onto an empty platform (including an old-version backup and unsafe file paths)
 - QuickBooks, against an in-memory stand-in for QuickBooks (tests never touch the network):
   - connecting, and refusing sign-ins that didn't start in this browser
   - customers and invoices (lines, tax flags, discount, deposits), edits and voids
@@ -306,12 +351,14 @@ backline/
   files.py           event document storage (uploads folder, allowed types, downloads)
   quickbooks.py      QuickBooks Online: sign-in, sending invoices and payments, bringing payments back
   intake.py          the event request form: questions, reading answers, turning a request into an event
+  backup.py          backup downloads and restoring onto an empty platform
   seed.py            Chicago demo data
   views/             dashboard, events (crew/gear/checklists/chat/calendar), inventory,
                      people (clients/venues/crew), contracts, invoices, crewpay, settings, quickbooks,
-                     requests (the office inbox), intake (the public request form),
+                     requests (the office inbox), intake (the public request form), backups,
                      public (crew worksheets, contract signing, client invoices)
   templates/, static/ (static/brand/ holds the logo and icons)
+render.yaml          Render Blueprint for the live site
 tests/
 ```
 

@@ -12,6 +12,11 @@
       <tr><td><strong>{{ u.username }}</strong>{% if current_user and u.id == current_user.id %} <span class="muted small">(you)</span>{% endif %}</td>
         <td class="small muted">since {{ u.created_at|fdate('short') }}</td>
         <td class="right">{% if not current_user or u.id != current_user.id %}
+          <details class="inline-details"><summary class="small">Set password</summary>
+            <form method="post" class="form-row" style="margin-top:.4rem">{{ csrf() }}<input type="hidden" name="action" value="reset"><input type="hidden" name="user_id" value="{{ u.id }}">
+              <input name="new_password" type="password" minlength="8" required autocomplete="new-password" aria-label="New password for {{ u.username }}" placeholder="New password">
+              <button class="btn btn-small" type="submit">Set</button></form>
+          </details>
           <form method="post" data-confirm="Remove {{ u.username }}?">{{ csrf() }}<input type="hidden" name="action" value="delete"><input type="hidden" name="user_id" value="{{ u.id }}"><button class="link danger small" type="submit">Remove</button></form>
         {% endif %}</td></tr>
     {% endfor %}

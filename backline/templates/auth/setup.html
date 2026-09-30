@@ -10,6 +10,10 @@
   {% if error %}<div class="flash flash-bad">{{ error }}</div>{% endif %}
   <form method="post">
     {{ csrf() }}
+    {% if needs_code %}
+    <div class="field"><label for="setup_code">Setup code</label><input id="setup_code" name="setup_code" autocomplete="off" spellcheck="false" required>
+      <div class="help">From your Render service: Environment → BACKLINE_SETUP_CODE. It keeps strangers from creating this account first.</div></div>
+    {% endif %}
     <div class="field"><label for="company_name">Company name</label><input id="company_name" name="company_name" value="Chicago Sound and Backline"></div>
     <div class="field"><label for="username">Username</label><input id="username" name="username" autocomplete="username" required></div>
     <div class="field"><label for="password">Password</label><input id="password" name="password" type="password" minlength="8" autocomplete="new-password" required><div class="help">At least 8 characters.</div></div>

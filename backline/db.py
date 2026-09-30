@@ -2,6 +2,7 @@ import sqlite3
 
 import click
 from flask import current_app, g
+from flask.cli import with_appcontext
 
 from .defaults import (  # noqa: F401  (re-exported for callers)
     _OLD_DEFAULT_COMPANY_NAME,
@@ -238,6 +239,24 @@ def create_user_command(username, password):
     click.echo(f"Created user {username}.")
 
 
+@click.command("reset-password")
+@click.argument("username")
+@click.password_option()
+@with_appcontext
+def reset_password_command(username, password):
+    """Set a new password for a user (e.g. from the Render Shell if everyone is locked out)."""
+    from werkzeug.security import generate_password_hash
+
+    user = query("SELECT id FROM users WHERE username = ?", (username,), one=True)
+    if user is None:
+        raise click.ClickException(f"There's no user called {username}.")
+    if len(password) < 8:
+        raise click.ClickException("Use at least 8 characters.")
+    update("users", user["id"], {"password_hash": generate_password_hash(password)})
+    execute("DELETE FROM login_failures WHERE lower(username) = lower(?)", (username,))
+    click.echo(f"Set a new password for {username}.")
+
+
 @click.command("seed")
 def seed_command():
     """Load demo data (inventory, crew, clients, venues, events)."""
@@ -251,4 +270,5 @@ def init_app(app):
     app.teardown_appcontext(close_db)
     app.cli.add_command(init_db_command)
     app.cli.add_command(create_user_command)
+    app.cli.add_command(reset_password_command)
     app.cli.add_command(seed_command)

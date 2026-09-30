@@ -181,6 +181,8 @@ input[type=checkbox] { width: auto; accent-color: var(--accent); }
 textarea { resize: vertical; }
 label.check { display: flex; align-items: center; gap: .5rem; font-weight: 500; }
 label.check input { flex: none; }
+.inline-details { display: inline-block; margin-right: .6rem; text-align: left; }
+.inline-details summary { cursor: pointer; color: var(--accent); }
 .help { font-size: .8rem; color: var(--muted); }
 .error { font-size: .8rem; color: var(--bad); }
 .has-error input, .has-error select, .has-error textarea { border-color: var(--bad); }

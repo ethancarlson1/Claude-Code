@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf %}
+{% block title %}Backup{% endblock %}
+{% block heading %}<h1>Settings</h1>{% endblock %}
+{% block content %}
+{% include "settings/_tabs.html" %}
+<div class="stack" style="max-width:820px">
+  <section class="card">
+    <h2>Download a backup</h2>
+    <p>Everything in one .zip: the database (events, clients, gear, contracts, invoices, crew pay, requests…) and every uploaded document and logo.</p>
+    <p><a class="btn btn-primary" href="{{ url_for('backups.download') }}">Download backup</a></p>
+    <p class="help">Keep backups somewhere other than this computer, such as a cloud drive. {% if on_server %}Render also copies the platform's disk automatically every day and keeps those copies for at least a week.{% else %}A monthly backup is a good habit.{% endif %}</p>
+  </section>
+  <section class="card">
+    <h2>Restore a backup</h2>
+    {% if empty %}
+      <p>Moving to a new server, such as from your computer to Render? Upload a backup made there. It replaces everything here, including the user accounts, so afterwards you sign in with a username and password from the backed-up copy.</p>
+      <form method="post" action="{{ url_for('backups.restore') }}" enctype="multipart/form-data">
+        {{ csrf() }}
+        <div class="field"><label for="backup-file">Backup file (.zip)</label><input id="backup-file" type="file" name="backup" accept=".zip" required></div>
+        <label class="check" style="margin:.6rem 0"><input type="checkbox" name="confirm" value="1" required> Replace this platform's data with the backup</label>
+        <div class="form-actions"><button class="btn" type="submit">Restore backup</button></div>
+      </form>
+    {% else %}
+      <p class="muted">This platform already has bookings, so restoring is turned off: a backup can never overwrite live data by accident.</p>
+      <p class="help">To recover from a backup, set up a new, empty copy of the platform and restore it there.</p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

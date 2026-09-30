@@ -23,6 +23,13 @@ def _assignment(reference, key):
     return row
 
 
+@bp.route("/healthz")
+def healthz():
+    """For the host's health checks: the app is up and can read its database."""
+    db.scalar("SELECT 1")
+    return Response("ok", mimetype="text/plain", headers={"Cache-Control": "no-store"})
+
+
 @bp.route("/logo")
 def logo():
     """Public so the logo shows on the sign-in page and on crew and client pages.

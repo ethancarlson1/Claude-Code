@@ -1,0 +1,35 @@
+# Render Blueprint: the live Chicago Sound and Backline platform.
+# In Render: New → Blueprint → pick this repository. See "Going live on
+# Render" in README.md for the step-by-step guide.
+services:
+  - type: web
+    name: chicago-sound-backline
+    runtime: python
+    # A paid instance type is required: free services can't keep a disk, so
+    # bookings and uploads would be lost on every restart or update.
+    plan: starter
+    region: ohio
+    buildCommand: pip install -r requirements.txt
+    # Keep Render's X-Forwarded-* headers: the app reads them (BACKLINE_BEHIND_PROXY)
+    # so its links and cookies use https.
+    startCommand: waitress-serve --host=0.0.0.0 --port=$PORT --threads=8 --no-clear-untrusted-proxy-headers --call backline:create_app
+    healthCheckPath: /healthz
+    # The database and uploaded files live here and survive deploys.
+    # Render snapshots the disk daily. It can be made bigger later, not smaller.
+    disk:
+      name: backline-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: BACKLINE_DATABASE
+        value: /var/data/backline.sqlite3
+      - key: BACKLINE_UPLOADS
+        value: /var/data/uploads
+      - key: BACKLINE_BEHIND_PROXY
+        value: "1"
+      - key: BACKLINE_SECRET_KEY
+        generateValue: true
+      # Needed once, to create the first admin account. Find it under the
+      # service's Environment tab.
+      - key: BACKLINE_SETUP_CODE
+        generateValue: true
