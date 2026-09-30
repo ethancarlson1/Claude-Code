@@ -44,6 +44,7 @@ MIGRATIONS = {
     "invoices": [
         ("contract_id", "INTEGER REFERENCES contracts(id) ON DELETE SET NULL"),
         ("kind", "TEXT"),
+        ("discount_type", "TEXT NOT NULL DEFAULT 'amount'"),
         ("qbo_id", "TEXT"),
         ("qbo_doc_number", "TEXT"),
         ("qbo_synced_at", "TEXT"),

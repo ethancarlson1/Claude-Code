@@ -99,7 +99,7 @@ Crew can accept or decline the call from the page. The office copy of the worksh
   - The contracts list shows each contract's deposit status and amount received.
 
 **Invoices**
-- Line items can be pre-filled from the event's priced gear list. Each line can be marked taxable or not. You can add a discount and a tax rate, and record payments.
+- Line items can be pre-filled from the event's priced gear list. Each line can be marked taxable or not. You can add a tax rate and a discount, either in dollars or as a percentage of the subtotal ("Discount (10%)" on the invoice), and record payments.
 - Record each payment received with its date, amount, method (check, ACH, card, Zelle…) and check or reference number.
 - Status is derived automatically: draft, sent, partial, paid, overdue or void. Sent invoices get a client link. The invoices list totals Outstanding, Overdue and Collected this month.
 - Optional **QuickBooks Online** connection: sent invoices are copied to QuickBooks, clients can pay online, and payments sync both ways (see below).

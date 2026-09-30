@@ -42,7 +42,7 @@
 </table>
 <table class="totals" style="margin-top:.6rem">
   <tr><td>Subtotal</td><td class="num">{{ totals.subtotal|money }}</td></tr>
-  {% if totals.discount %}<tr><td>Discount</td><td class="num">-{{ totals.discount|money }}</td></tr>{% endif %}
+  {% if totals.discount %}<tr><td>Discount{% if totals.discount_percent is not none %} ({{ '%g'|format(totals.discount_percent) }}%){% endif %}</td><td class="num">-{{ totals.discount|money }}</td></tr>{% endif %}
   {% if invoice.tax_rate %}<tr><td>Tax ({{ '%g'|format(invoice.tax_rate) }}%)</td><td class="num">{{ totals.tax|money }}</td></tr>{% endif %}
   <tr class="grand"><td>Total</td><td class="num">{{ totals.total|money }}</td></tr>
   {% for p in payments %}<tr><td class="small">Paid {{ p.paid_on|fdate('short') }}{% if p.method %} · {{ p.method }}{% endif %}</td><td class="num">-{{ p.amount|money }}</td></tr>{% endfor %}

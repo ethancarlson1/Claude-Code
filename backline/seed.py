@@ -488,7 +488,7 @@ def seed():
     _message(wedding, "Jordan Pike", "I'll bring the spare Twin in the van in case the guitarist's amp acts up.", 60 * 20)
     _message(wedding, "Office", "Reminder: black suit and tie for this one. No sneakers.", 90, crew=False)
     _contract(wedding, "sent", deposit_due=day(-2))
-    _invoice(wedding, "draft", today, util.parse_date(wedding_date) - timedelta(days=14))
+    _invoice(wedding, "draft", today, max(util.parse_date(wedding_date) - timedelta(days=14), today + timedelta(days=7)))
 
     # 4. Private party: small PA, DJ and toasts, indoor + roof deck.
     party = _event(title="Jamal's 40th Birthday", event_type="Private Party", status="confirmed",

@@ -33,6 +33,45 @@ def test_totals_with_discount_tax_and_non_taxable_lines(app, make):
     assert status == "draft"
 
 
+def test_percent_discount(app, make):
+    inv = _invoice(make, tax_rate=10, discount=10, discount_type="percent")
+    make("invoice_items", invoice_id=inv, description="Backline", quantity=2, unit_price=150)   # 300 taxable
+    make("invoice_items", invoice_id=inv, description="Labor", quantity=1, unit_price=100, taxable=0)  # 100
+    totals, _status = _totals(app, inv)
+    # 10% of 400 = 40 off, spread 3:1 -> taxable base 270 -> tax 27.00
+    assert (totals["discount"], totals["discount_percent"], totals["tax"], totals["total"]) == \
+        (Decimal("40.00"), Decimal("10"), Decimal("27.00"), Decimal("387.00"))
+    with app.app_context():
+        dbm.update("invoices", inv, {"discount": 12.5})
+    assert _totals(app, inv)[0]["discount"] == Decimal("50.00")
+    with app.app_context():
+        dbm.update("invoices", inv, {"discount": 100})
+    assert _totals(app, inv)[0]["total"] == Decimal("0.00")
+
+
+def test_choosing_dollars_or_percent_when_editing(client, app, make):
+    inv = _invoice(make)
+    lines = {"issue_date": "2030-01-01", "tax_rate": "0", "item_description": ["PA"], "item_quantity": ["1"],
+             "item_price": ["800"], "item_taxable": ["1"]}
+    page = client.get(f"/invoices/{inv}/edit").data.decode()
+    assert '<option value="amount" selected>Dollars ($)</option>' in page and "Percent (%)" in page
+
+    resp = client.post(f"/invoices/{inv}/edit", data={**lines, "discount": "15", "discount_type": "percent"})
+    assert resp.status_code == 302
+    assert query(app, "SELECT discount, discount_type FROM invoices", one=True) == {"discount": 15, "discount_type": "percent"}
+    page = client.get(f"/invoices/{inv}").data.decode()
+    assert "Discount (15%)" in page and "-$120.00" in page and "$680.00" in page
+
+    page = client.post(f"/invoices/{inv}/edit", data={**lines, "discount": "150", "discount_type": "percent"}).data.decode()
+    assert "can&#39;t be more than 100%" in page
+    page = client.post(f"/invoices/{inv}/edit", data={**lines, "discount": "-5", "discount_type": "amount"}).data.decode()
+    assert "can&#39;t be negative" in page
+
+    client.post(f"/invoices/{inv}/edit", data={**lines, "discount": "50", "discount_type": "amount"})
+    page = client.get(f"/invoices/{inv}").data.decode()
+    assert "Discount</td>" in page and "-$50.00" in page and "Discount (" not in page
+
+
 def test_status_progression(app, make):
     today = date.today()
     inv = _invoice(make, status="sent", due_date=(today + timedelta(days=5)).isoformat())
@@ -89,7 +128,8 @@ def test_edit_replaces_line_items(client, app, make):
         {"description": "Drum kit", "unit_price": 175, "taxable": 1},
         {"description": "Delivery", "unit_price": 1200.5, "taxable": 0},
     ]
-    assert query(app, "SELECT tax_rate, discount FROM invoices", one=True) == {"tax_rate": 8.25, "discount": 0}
+    assert query(app, "SELECT tax_rate, discount, discount_type FROM invoices", one=True) == \
+        {"tax_rate": 8.25, "discount": 0, "discount_type": "amount"}
 
 
 def test_edit_rejects_bad_lines(client, app, make):

@@ -163,7 +163,13 @@
         var tax = tr.querySelector("[name=item_taxable_flag]");
         if (tax && tax.checked) taxable += line;
       });
-      var discount = Math.min(num(document.querySelector("[name=discount]")), subtotal);
+      // Dollars off, or a percentage of the subtotal.
+      var rawDiscount = Math.max(num(document.querySelector("[name=discount]")), 0);
+      var discountType = document.querySelector("[name=discount_type]");
+      var percent = discountType && discountType.value === "percent";
+      var discount = Math.min(percent ? cents((subtotal * rawDiscount) / 100) : rawDiscount, subtotal);
+      var discountLabel = document.querySelector("[data-discount-label]");
+      if (discountLabel) discountLabel.textContent = percent && rawDiscount ? "(" + rawDiscount + "%)" : "";
       if (subtotal > 0 && taxable > 0) taxable -= (discount * taxable) / subtotal;
       var tax = cents((taxable * num(document.querySelector("[name=tax_rate]"))) / 100);
       var set = function (key, v) { var el = document.querySelector('[data-total="' + key + '"]'); if (el) el.textContent = fmt(v); };
@@ -184,7 +190,10 @@
       if (tr && e.target.name === "item_taxable_flag") syncTaxable(tr);
       recalc();
     });
-    document.querySelectorAll("[name=discount], [name=tax_rate]").forEach(function (el) { el.addEventListener("input", recalc); });
+    document.querySelectorAll("[name=discount], [name=tax_rate], [name=discount_type]").forEach(function (el) {
+      el.addEventListener("input", recalc);
+      el.addEventListener("change", recalc);
+    });
     lines.addEventListener("click", function (e) {
       if (e.target.closest("[data-remove-line]")) {
         e.target.closest("tr").remove();

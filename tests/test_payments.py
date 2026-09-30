@@ -174,6 +174,8 @@ def test_record_deposit_from_contract(client, app, make):
     assert money["remaining"] == Decimal("500.00")
     invoices = query(app, "SELECT * FROM invoices WHERE contract_id = ?", (contract,))
     assert len(invoices) == 1 and invoices[0]["kind"] == "deposit" and invoices[0]["status"] == "sent"
+    # The deposit was due yesterday, but an invoice issued today can't be due before today.
+    assert (invoices[0]["issue_date"], invoices[0]["due_date"]) == (day(0), day(0))
     page = client.get(f"/contracts/{contract}").data.decode()
     assert "Received" in page and "1042" in page
     assert "CT-TEST-1" in client.get(f"/invoices/{invoices[0]['id']}").data.decode()

@@ -121,6 +121,13 @@ def test_every_page_renders_with_demo_data(seeded, app):
     assert failures == []
 
 
+def test_demo_invoices_can_be_edited_as_they_are(seeded, app):
+    """No demo invoice is due before it was issued (the edit form would refuse to save it)."""
+    with app.app_context():
+        bad = dbm.query("SELECT number FROM invoices WHERE due_date < issue_date")
+    assert [r["number"] for r in bad] == []
+
+
 def test_demo_data_shows_expected_alerts(seeded):
     page = seeded.get("/").data.decode()
     assert "Gear conflicts" in page and "Lakefront Harvest Festival" in page

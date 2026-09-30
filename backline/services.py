@@ -330,7 +330,10 @@ def invoice_totals(invoice, items=None, payments=None):
         subtotal += line
         if it["taxable"]:
             taxable += line
-    discount = min(util.round_money(invoice["discount"]), subtotal)
+    # The discount is dollars off, or a percentage of the subtotal.
+    percent = util.to_decimal(invoice["discount"]) if _discount_type(invoice) == "percent" else None
+    discount = util.round_money(subtotal * percent / 100) if percent is not None else util.round_money(invoice["discount"])
+    discount = min(max(discount, Decimal("0")), subtotal)
     # Discount is applied before tax, spread proportionally over taxable lines.
     if subtotal > 0 and taxable > 0:
         taxable -= discount * taxable / subtotal
@@ -340,11 +343,16 @@ def invoice_totals(invoice, items=None, payments=None):
     return {
         "subtotal": util.round_money(subtotal),
         "discount": discount,
+        "discount_percent": percent,
         "tax": tax,
         "total": total,
         "paid": paid,
         "balance": util.round_money(total - paid),
     }
+
+
+def _discount_type(invoice):
+    return invoice["discount_type"] if "discount_type" in invoice.keys() else "amount"
 
 
 def invoice_status(invoice, totals=None):
@@ -566,6 +574,7 @@ def create_contract_invoice(contract, kind, status="draft"):
         amount = util.round_money(util.to_decimal(contract["total_amount"]) - deposit)
         due = contract["balance_due_date"] or event["event_date"]
         description = f"Balance per contract {contract['number']}: {event['title']}"
+    due = max(due, util.today().isoformat())  # issued today, so it can't already be past due
     invoice_id = db.insert("invoices", {
         "number": next_number("invoices", db.get_setting("invoice_prefix")),
         "event_id": event["id"], "client_id": event["client_id"], "contract_id": contract["id"], "kind": kind,

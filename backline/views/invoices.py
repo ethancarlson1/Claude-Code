@@ -24,7 +24,9 @@ HEADER_FIELDS = [
     Field("issue_date", "Issue date", type="date", required=True),
     Field("due_date", "Due date", type="date"),
     Field("tax_rate", "Tax rate (%)", type="number"),
-    Field("discount", "Discount ($)", type="money"),
+    Field("discount", "Discount", type="money", help="Dollars off, or a percentage of the subtotal."),
+    Field("discount_type", "Discount is", type="select", required=True, default="amount",
+          choices=[("amount", "Dollars ($)"), ("percent", "Percent (%)")]),
     Field("notes", "Notes to client", type="textarea"),
     Field("terms", "Terms", type="textarea"),
 ]
@@ -80,6 +82,13 @@ def _warn(message):
         flash(message, "warn")
 
 
+def _header_form(form):
+    """The submitted header. Forms from before the $/% choice existed mean dollars."""
+    form = form.copy()
+    form.setdefault("discount_type", "amount")
+    return form
+
+
 def _clean_header(data, errors):
     if data.get("tax_rate") is None:
         data["tax_rate"] = 0
@@ -87,6 +96,10 @@ def _clean_header(data, errors):
         errors["tax_rate"] = "Tax rate must be between 0 and 100."
     if data.get("discount") is None:
         data["discount"] = 0
+    if data["discount"] < 0:
+        errors["discount"] = "The discount can't be negative."
+    elif data.get("discount_type") == "percent" and data["discount"] > 100:
+        errors["discount"] = "A percentage discount can't be more than 100%."
     if data.get("due_date") and data.get("issue_date") and data["due_date"] < data["issue_date"]:
         errors["due_date"] = "Due date can't be before the issue date."
 
@@ -133,13 +146,14 @@ def new():
         "due_date": (today + timedelta(days=15)).isoformat(),
         "tax_rate": db.get_setting("default_tax_rate"),
         "discount": 0,
+        "discount_type": "amount",
         "terms": db.get_setting("invoice_terms"),
     }
     if event and util.parse_date(event["event_date"]) > today + timedelta(days=15):
         values["due_date"] = event["event_date"]
     errors = {}
     if request.method == "POST":
-        values, errors = forms.parse(HEADER_FIELDS, request.form)
+        values, errors = forms.parse(HEADER_FIELDS, _header_form(request.form))
         _clean_header(values, errors)
         if not errors:
             values["number"] = services.next_number("invoices", db.get_setting("invoice_prefix"))
@@ -195,7 +209,7 @@ def edit(invoice_id):
     items = db.query("SELECT * FROM invoice_items WHERE invoice_id = ? ORDER BY sort, id", (invoice_id,))
     line_errors = []
     if request.method == "POST":
-        values, errors = forms.parse(HEADER_FIELDS, request.form)
+        values, errors = forms.parse(HEADER_FIELDS, _header_form(request.form))
         _clean_header(values, errors)
         lines, line_errors = _parse_lines(request.form)
         if not errors and not line_errors:

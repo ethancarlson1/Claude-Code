@@ -292,7 +292,8 @@ CREATE TABLE IF NOT EXISTS invoices (
     issue_date TEXT NOT NULL,
     due_date TEXT,
     tax_rate REAL NOT NULL DEFAULT 0,            -- percent
-    discount REAL NOT NULL DEFAULT 0,            -- flat amount
+    discount REAL NOT NULL DEFAULT 0,            -- dollars off, or a percentage (see discount_type)
+    discount_type TEXT NOT NULL DEFAULT 'amount', -- amount | percent
     notes TEXT,
     terms TEXT,
     public_key TEXT NOT NULL UNIQUE,

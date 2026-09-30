@@ -179,6 +179,16 @@ def test_marking_sent_creates_customer_and_invoice(client, app, connected, invoi
     assert len(connected.customers) == 1 and len(connected.invoices) == 2
 
 
+def test_percent_discount_goes_to_quickbooks_as_the_amount(client, app, connected, invoice):
+    invoice_id = invoice(tax_rate=0, discount=10, discount_type="percent")
+    _send(client, invoice_id)
+    (remote,) = connected.invoices.values()
+    assert remote["Line"][-1] == {"DetailType": "DiscountLineDetail", "Amount": 110.0,
+                                  "DiscountLineDetail": {"PercentBased": False}}
+    assert _local(app, invoice_id)["qbo_total"] == 990.0
+    assert "QuickBooks shows a total" not in client.get(f"/invoices/{invoice_id}").data.decode()
+
+
 def test_existing_customer_is_found_by_name(client, app, connected, invoice):
     connected.customers["7"] = {"Id": "7", "DisplayName": "O'Hare Events", "SyncToken": "0"}
     invoice_id = invoice(company="O'Hare Events")
