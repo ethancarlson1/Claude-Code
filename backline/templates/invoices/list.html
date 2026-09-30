@@ -1,8 +1,11 @@
 {% extends "base.html" %}
-{% from "_macros.html" import badge, empty %}
+{% from "_macros.html" import badge, empty, csrf %}
 {% block title %}Invoices{% endblock %}
 {% block heading %}<h1>Invoices</h1>{% endblock %}
-{% block actions %}<a class="btn btn-primary" href="{{ url_for('invoices.new') }}">+ New invoice</a>{% endblock %}
+{% block actions %}
+  {% if qbo_connected %}<form method="post" action="{{ url_for('quickbooks.check') }}" class="inline">{{ csrf() }}<button class="btn" type="submit" title="{% if qbo_last_check %}Last checked {{ qbo_last_check|fdatetime }}{% endif %}">Check QuickBooks</button></form>{% endif %}
+  <a class="btn btn-primary" href="{{ url_for('invoices.new') }}">+ New invoice</a>
+{% endblock %}
 {% block content %}
 <div class="stats">
   <a class="stat" href="{{ url_for('invoices.index') }}"><div class="stat-label">Outstanding</div><div class="stat-value">{{ outstanding|money }}</div><div class="stat-note">sent, unpaid balances</div></a>
@@ -20,7 +23,8 @@
     <tbody>
     {% for r in rows %}{% set i = r.row %}
       <tr>
-        <td><a href="{{ url_for('invoices.detail', invoice_id=i.id) }}"><strong>{{ i.number }}</strong></a></td>
+        <td class="nowrap"><a href="{{ url_for('invoices.detail', invoice_id=i.id) }}"><strong>{{ i.number }}</strong></a>
+          {% if i.qbo_error %} <span class="badge badge-bad" title="{{ i.qbo_error }}">QB problem</span>{% elif i.qbo_id %} <span class="badge badge-muted" title="In QuickBooks">QB</span>{% endif %}</td>
         <td>{{ i.client_name or '—' }}</td>
         <td>{{ i.event_title or '—' }}</td>
         <td class="nowrap">{{ i.issue_date|fdate('short') }}</td>

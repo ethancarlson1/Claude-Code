@@ -3,4 +3,5 @@
   <a href="{{ url_for('settings.event_types') }}" class="{{ 'active' if request.endpoint.startswith('settings.event_type') }}">Event types</a>
   <a href="{{ url_for('settings.checklists') }}" class="{{ 'active' if request.endpoint.startswith('settings.checklist') }}">Checklist templates</a>
   <a href="{{ url_for('settings.users') }}" class="{{ 'active' if request.endpoint == 'settings.users' }}">Users</a>
+  <a href="{{ url_for('quickbooks.settings') }}" class="{{ 'active' if request.endpoint == 'quickbooks.settings' }}">QuickBooks</a>
 </nav>

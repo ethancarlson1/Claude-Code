@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS clients (
     phone TEXT,
     address TEXT,
     notes TEXT,
+    qbo_customer_id TEXT,                        -- linked QuickBooks customer
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -295,6 +296,15 @@ CREATE TABLE IF NOT EXISTS invoices (
     notes TEXT,
     terms TEXT,
     public_key TEXT NOT NULL UNIQUE,
+    -- QuickBooks copy of this invoice (see quickbooks.py)
+    qbo_id TEXT,
+    qbo_doc_number TEXT,
+    qbo_synced_at TEXT,
+    qbo_checked_at TEXT,
+    qbo_total REAL,                              -- as QuickBooks calculated it
+    qbo_balance REAL,
+    qbo_pay_link TEXT,                           -- QuickBooks' online payment page
+    qbo_error TEXT,                              -- last sync problem, shown on the invoice
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -315,5 +325,7 @@ CREATE TABLE IF NOT EXISTS payments (
     amount REAL NOT NULL,
     method TEXT,
     reference TEXT,
-    notes TEXT
+    notes TEXT,
+    qbo_payment_id TEXT,                         -- the same payment in QuickBooks
+    qbo_imported INTEGER NOT NULL DEFAULT 0      -- 1 = recorded in QuickBooks, not here
 );

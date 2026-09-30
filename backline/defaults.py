@@ -114,6 +114,12 @@ DEFAULT_SETTINGS = {
     "invoice_terms": "Payment due within 15 days. Late balances are subject to a 1.5% monthly fee.",
     "crew_pay_days": "14",
     "logo_file": "",  # an uploaded replacement logo; empty = the built-in one
+    # QuickBooks Online (Settings → QuickBooks). Nothing is sent until someone connects.
+    "qbo_environment": "sandbox",
+    "qbo_auto_push": "1",          # send invoices to QuickBooks when they're marked sent
+    "qbo_online_payments": "1",    # let clients pay QuickBooks invoices by card / bank transfer
+    "qbo_email_invoices": "0",     # have QuickBooks email new invoices to the client
+    "qbo_auto_check": "1",         # look for new QuickBooks payments every 15 minutes
     "contract_template": DEFAULT_CONTRACT_TEMPLATE,
     "crew_terms": DEFAULT_CREW_TERMS,
     "crew_payment_terms": DEFAULT_CREW_PAYMENT,

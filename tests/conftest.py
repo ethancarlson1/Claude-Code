@@ -4,6 +4,17 @@ import pytest
 
 from backline import create_app
 from backline import db as dbm
+from backline import quickbooks
+
+
+@pytest.fixture(autouse=True)
+def no_network(monkeypatch):
+    """Tests never talk to Intuit. QuickBooks tests swap in a fake server."""
+
+    def refuse(method, url, *_args, **_kwargs):
+        raise AssertionError(f"unexpected network call: {method} {url}")
+
+    monkeypatch.setattr(quickbooks, "_send", refuse)
 
 
 @pytest.fixture

@@ -148,7 +148,11 @@ def test_old_database_is_migrated(tmp_path):
         assert {"dietary", "w9_on_file"} <= {r[1] for r in dbm.query("PRAGMA table_info(crew)")}
         assert {"actual_hours", "final_amount", "paid_on", "paid_amount", "paid_method", "paid_reference"} <= \
             {r[1] for r in dbm.query("PRAGMA table_info(event_crew)")}
-        assert {"contract_id", "kind"} <= {r[1] for r in dbm.query("PRAGMA table_info(invoices)")}
+        assert {"contract_id", "kind", "qbo_id", "qbo_total", "qbo_balance", "qbo_pay_link", "qbo_error"} <= \
+            {r[1] for r in dbm.query("PRAGMA table_info(invoices)")}
+        assert {"qbo_payment_id", "qbo_imported"} <= {r[1] for r in dbm.query("PRAGMA table_info(payments)")}
+        assert "qbo_customer_id" in {r[1] for r in dbm.query("PRAGMA table_info(clients)")}
+        assert dbm.scalar("SELECT name FROM sqlite_master WHERE name = 'idx_payments_qbo'")
         tables = {r[0] for r in dbm.query("SELECT name FROM sqlite_master WHERE type = 'table'")}
         assert {"vehicles", "event_vehicles", "event_files"} <= tables
         assert dbm.get_setting("company_name") == "Chicago Sound and Backline"

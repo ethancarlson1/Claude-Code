@@ -23,10 +23,10 @@
         {% if client and client.email %}
         <p style="margin-top:.6rem"><a class="btn btn-small" href="{{ mailto(client.email, 'Invoice ' ~ invoice.number ~ ' from ' ~ settings.company_name, 'Hi ' ~ client.name ~ ',\n\nYour invoice ' ~ invoice.number ~ ' for ' ~ totals.balance|money ~ ' is ready:\n' ~ link ~ '\n\nThank you!\n' ~ settings.company_name) }}">Email to client</a></p>
         {% endif %}
-        <form method="post" action="{{ url_for('invoices.set_status', invoice_id=invoice.id) }}">{{ csrf() }}<input type="hidden" name="action" value="unsend"><button class="link small" type="submit">Move back to draft</button></form>
+        {% if not invoice.qbo_id %}<form method="post" action="{{ url_for('invoices.set_status', invoice_id=invoice.id) }}">{{ csrf() }}<input type="hidden" name="action" value="unsend"><button class="link small" type="submit">Move back to draft</button></form>{% endif %}
       {% else %}
         <p class="muted">This invoice is void.</p>
-        <form method="post" action="{{ url_for('invoices.set_status', invoice_id=invoice.id) }}">{{ csrf() }}<input type="hidden" name="action" value="reopen"><button class="btn btn-small" type="submit">Reopen as draft</button></form>
+        {% if not invoice.qbo_id %}<form method="post" action="{{ url_for('invoices.set_status', invoice_id=invoice.id) }}">{{ csrf() }}<input type="hidden" name="action" value="reopen"><button class="btn btn-small" type="submit">Reopen as draft</button></form>{% endif %}
       {% endif %}
     </section>
     <section class="card">
@@ -34,8 +34,8 @@
       {% if payments %}
       <table><tbody>
         {% for p in payments %}
-        <tr><td>{{ p.paid_on|fdate('short') }}<div class="small muted">{{ [p.method, p.reference]|select|join(' · ') }}</div></td><td class="num">{{ p.amount|money }}</td>
-          <td><form method="post" action="{{ url_for('invoices.delete_payment', invoice_id=invoice.id, payment_id=p.id) }}" data-confirm="Remove this payment?">{{ csrf() }}<button class="link danger small" type="submit" aria-label="Remove payment">✕</button></form></td></tr>
+        <tr><td>{{ p.paid_on|fdate('short') }}<div class="small muted">{{ [p.method, p.reference]|select|join(' · ') }}{% if p.qbo_payment_id %}{% if not p.qbo_imported %} · in QuickBooks{% endif %}{% elif invoice.qbo_id %} · <span title="Added to QuickBooks on the next update">not in QuickBooks yet</span>{% endif %}</div></td><td class="num">{{ p.amount|money }}</td>
+          <td>{% if not p.qbo_payment_id %}<form method="post" action="{{ url_for('invoices.delete_payment', invoice_id=invoice.id, payment_id=p.id) }}" data-confirm="Remove this payment?">{{ csrf() }}<button class="link danger small" type="submit" aria-label="Remove payment">✕</button></form>{% endif %}</td></tr>
         {% endfor %}
       </tbody></table>
       {% endif %}
@@ -44,10 +44,39 @@
       <form method="post" action="{{ url_for('invoices.add_payment', invoice_id=invoice.id) }}">
         {{ csrf() }}
         <div class="grid-form" style="grid-template-columns:1fr 1fr">{% for f in payment_fields %}{{ field(f, payment_defaults, {}) }}{% endfor %}</div>
+        {% if invoice.qbo_id %}<p class="help">Payments recorded here are added to QuickBooks too. To change or delete one afterwards, do it in QuickBooks.</p>{% endif %}
         <div class="form-actions"><button class="btn" type="submit">Record payment</button></div>
       </form>
       {% endif %}
     </section>
+    {% if qbo.connected or invoice.qbo_id %}
+    <section class="card" id="quickbooks">
+      <h2>QuickBooks</h2>
+      {% if invoice.qbo_error %}<div class="alert-box small">{{ invoice.qbo_error }}</div>{% endif %}
+      {% if invoice.qbo_id %}
+        <p>Invoice #{{ invoice.qbo_doc_number or invoice.number }} in QuickBooks · <a href="{{ qbo.url }}" target="_blank" rel="noopener">Open in QuickBooks</a></p>
+        {% if invoice.qbo_total is not none and invoice.status != 'void' %}<p class="small">Total {{ invoice.qbo_total|money }} · Still owed {{ invoice.qbo_balance|money }}</p>{% endif %}
+        {% for d in qbo.differences %}<div class="flash flash-warn small">{{ d }}</div>{% endfor %}
+        {% if invoice.qbo_pay_link and invoice.status != 'void' %}<p class="small">Clients can pay online from the <strong>Pay online</strong> button on their invoice link.</p>{% endif %}
+        {% if invoice.qbo_checked_at %}<p class="small muted">Last checked {{ invoice.qbo_checked_at|fdatetime }}</p>{% endif %}
+        {% if qbo.connected and invoice.status != 'void' %}
+        <div class="form-row">
+          <form method="post" action="{{ url_for('quickbooks.push', invoice_id=invoice.id) }}" class="inline">{{ csrf() }}<button class="btn btn-small" type="submit">Update QuickBooks</button></form>
+          <form method="post" action="{{ url_for('quickbooks.check') }}" class="inline">{{ csrf() }}<button class="btn btn-small" type="submit">Check for payments</button></form>
+        </div>
+        {% elif qbo.connected and invoice.qbo_error %}
+        <form method="post" action="{{ url_for('quickbooks.push', invoice_id=invoice.id) }}">{{ csrf() }}<button class="btn btn-small" type="submit">Void in QuickBooks</button></form>
+        {% elif not qbo.connected %}<p class="small muted">QuickBooks is disconnected. Reconnect under <a href="{{ url_for('quickbooks.settings') }}">Settings → QuickBooks</a> to keep this invoice in step.</p>{% endif %}
+      {% elif invoice.status == 'draft' %}
+        <p class="small muted">{% if settings.qbo_auto_push == '1' %}Goes to QuickBooks when you mark it sent.{% else %}Mark it sent, then send it to QuickBooks from here.{% endif %}</p>
+      {% elif invoice.status == 'sent' %}
+        <p class="small">Not in QuickBooks yet.</p>
+        <form method="post" action="{{ url_for('quickbooks.push', invoice_id=invoice.id) }}">{{ csrf() }}<button class="btn btn-primary btn-small" type="submit">Send to QuickBooks</button></form>
+      {% else %}
+        <p class="small muted">Void invoices aren't sent to QuickBooks.</p>
+      {% endif %}
+    </section>
+    {% endif %}
     <section class="card">
       {% if invoice.status != 'void' %}
       <form method="post" action="{{ url_for('invoices.set_status', invoice_id=invoice.id) }}" data-confirm="Void this invoice?" class="inline">{{ csrf() }}<input type="hidden" name="action" value="void"><button class="btn btn-small btn-danger" type="submit">Void</button></form>

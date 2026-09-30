@@ -32,7 +32,7 @@
       <li><a href="{{ url_for('people.index', kind='clients') }}" class="{{ 'active' if request.view_args and request.view_args.get('kind') == 'clients' }}">Clients</a></li>
       <li><a href="{{ url_for('people.index', kind='venues') }}" class="{{ 'active' if request.view_args and request.view_args.get('kind') == 'venues' }}">Venues</a></li>
       <li class="nav-label">Admin</li>
-      <li><a href="{{ url_for('settings.index') }}" class="{{ 'active' if ep.startswith('settings.') }}">Settings</a></li>
+      <li><a href="{{ url_for('settings.index') }}" class="{{ 'active' if ep.startswith('settings.') or ep.startswith('quickbooks.') }}">Settings</a></li>
     </ul>
     {% if current_user %}
     <form class="sidebar-foot" method="post" action="{{ url_for('auth.logout') }}">

@@ -1,3 +1,4 @@
 {% extends "doc_base.html" %}
 {% block title %}Invoice {{ invoice.number }}{% endblock %}
+{% block toolbar %}{% if invoice.qbo_pay_link and invoice.qbo_pay_link.startswith('https://') and status not in ('paid', 'void') %}<a class="btn btn-primary" href="{{ invoice.qbo_pay_link }}" rel="noopener noreferrer">Pay {{ totals.balance|money }} online</a>{% endif %}{% endblock %}
 {% block document %}{% include "invoices/_document.html" %}{% endblock %}

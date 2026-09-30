@@ -179,6 +179,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent-soft
 input[type=checkbox] { width: auto; accent-color: var(--accent); }
 textarea { resize: vertical; }
 label.check { display: flex; align-items: center; gap: .5rem; font-weight: 500; }
+label.check input { flex: none; }
 .help { font-size: .8rem; color: var(--muted); }
 .error { font-size: .8rem; color: var(--bad); }
 .has-error input, .has-error select, .has-error textarea { border-color: var(--bad); }

@@ -72,11 +72,12 @@ def create_app(test_config=None):
         invoices,
         people,
         public,
+        quickbooks,
         settings,
     )
 
     auth.init_app(app)
-    for module in (dashboard, events, inventory, people, contracts, invoices, crewpay, public, settings):
+    for module in (dashboard, events, inventory, people, contracts, invoices, crewpay, public, settings, quickbooks):
         app.register_blueprint(module.bp)
 
     with app.app_context():

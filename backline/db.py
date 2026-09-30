@@ -44,7 +44,17 @@ MIGRATIONS = {
     "invoices": [
         ("contract_id", "INTEGER REFERENCES contracts(id) ON DELETE SET NULL"),
         ("kind", "TEXT"),
+        ("qbo_id", "TEXT"),
+        ("qbo_doc_number", "TEXT"),
+        ("qbo_synced_at", "TEXT"),
+        ("qbo_checked_at", "TEXT"),
+        ("qbo_total", "REAL"),
+        ("qbo_balance", "REAL"),
+        ("qbo_pay_link", "TEXT"),
+        ("qbo_error", "TEXT"),
     ],
+    "clients": [("qbo_customer_id", "TEXT")],
+    "payments": [("qbo_payment_id", "TEXT"), ("qbo_imported", "INTEGER NOT NULL DEFAULT 0")],
     "checklist_templates": [("crew_visible", "INTEGER NOT NULL DEFAULT 1")],
     "event_checklist_items": [("crew_visible", "INTEGER NOT NULL DEFAULT 1")],
 }
@@ -140,6 +150,11 @@ def _migrate(conn):
     conn.execute(
         "UPDATE settings SET value = ? WHERE key = 'company_name' AND value = ?",
         (COMPANY_NAME, _OLD_DEFAULT_COMPANY_NAME),
+    )
+    # Here rather than schema.sql: older databases only get the column above.
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_qbo ON payments(invoice_id, qbo_payment_id) "
+        "WHERE qbo_payment_id IS NOT NULL"
     )
 
 

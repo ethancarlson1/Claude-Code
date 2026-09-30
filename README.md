@@ -102,6 +102,7 @@ Crew can accept or decline the call from the page. The office copy of the worksh
 - Line items can be pre-filled from the event's priced gear list. Each line can be marked taxable or not. You can add a discount and a tax rate, and record payments.
 - Record each payment received with its date, amount, method (check, ACH, card, Zelle…) and check or reference number.
 - Status is derived automatically: draft, sent, partial, paid, overdue or void. Sent invoices get a client link. The invoices list totals Outstanding, Overdue and Collected this month.
+- Optional **QuickBooks Online** connection: sent invoices are copied to QuickBooks, clients can pay online, and payments sync both ways (see below).
 
 **Crew pay**
 - Each crew assignment has an **amount due**: the flat rate, or the hourly rate × hours. After the show, enter actual hours or a final amount (overtime, parking, a bonus) on the event's Crew tab.
@@ -118,6 +119,46 @@ Crew can accept or decline the call from the page. The office copy of the worksh
 
 Contracts, invoices and worksheets all print cleanly and can be saved as PDF from the browser. Other features: multiple users, CSRF protection, and "Email" buttons that open your mail app with the link already written in.
 
+## QuickBooks Online
+
+Connect your QuickBooks Online company under **Settings → QuickBooks**. Nothing is sent to QuickBooks until you do.
+
+**How it works once connected**
+- **Invoices go to QuickBooks when you mark them sent.**
+  - The client becomes a QuickBooks customer, matched by company name (or the person's name when there's no company).
+  - The invoice keeps its number, dates, lines, discount and notes.
+  - Editing a sent invoice updates QuickBooks, and voiding it voids it there too.
+  - Prefer to send by hand? Turn off automatic sending and use the invoice's **Send to QuickBooks** button.
+- **Clients can pay online.** With QuickBooks Payments turned on in QuickBooks, the client's invoice link gets a **Pay online** button that opens QuickBooks' payment page.
+- **Payments sync both ways.**
+  - Payments recorded here, including contract deposits, are added to QuickBooks.
+  - Payments made or recorded in QuickBooks show up here, updating the invoice status, contract deposits and the dashboard.
+  - The platform checks QuickBooks every 15 minutes while it's in use. You can also click **Check QuickBooks** on the Invoices page.
+- **QuickBooks has the final say on payments.** Once a payment is in QuickBooks, change or delete it there. The change shows up here on the next check.
+- **Sales tax:** taxable lines are marked taxable, and QuickBooks calculates the tax. If QuickBooks' total differs from this platform's, the invoice shows a warning so you can check it.
+- **Nothing fails silently.** If QuickBooks can't be updated, the change is still saved here. The invoice, the Invoices list and the dashboard say what went wrong, and **Update QuickBooks** tries again.
+
+**Setting it up**
+1. Sign in at developer.intuit.com with your Intuit account and create an app for QuickBooks Online with the *Accounting* permission. It's free.
+2. In **Settings → QuickBooks**:
+   - Copy the **Redirect URI** shown there into your Intuit app's keys page.
+   - Paste the app's **Client ID** and **Client Secret**, leave the environment on **Sandbox**, and save.
+3. Click **Connect to QuickBooks**, sign in, and pick Intuit's sandbox (practice) company.
+4. Choose the QuickBooks product/service that invoice lines post to, plus one for contract deposits if your accountant wants that, and save.
+5. Try it out, ideally on a demo copy of the database rather than your real bookings. To make one, rename the `instance` folder, then run `flask --app backline seed`.
+6. When you're ready for your real books:
+   - Switch the environment to **Production** and enter the production keys.
+   - Connect your real company.
+   - Production keys need the platform online at an https address (see *Running it for real*).
+
+   Connecting to a different company clears links to the old one, including practice payments that came from the sandbox.
+
+**Limits**
+- QuickBooks Online only (not QuickBooks Desktop), with US-style sales tax.
+- All invoice lines post to one product/service, with an optional second one for contract deposits and balances.
+- Crew payments aren't sent to QuickBooks.
+- QuickBooks is checked every 15 minutes rather than notifying the platform instantly.
+
 ## Branding
 
 The Chicago Sound & Backline logo appears in the sidebar, on the sign-in page, at the top of crew worksheets, and on contracts and invoices. The browser-tab and phone home-screen icons use the "csb" mark. The app's accent colors match the logo's blue.
@@ -129,7 +170,7 @@ To use a different logo, upload it under **Settings → Company & billing → Lo
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements.txt   # run this again after updating to a new version
 
 flask --app backline seed        # optional: demo data for Chicago Sound and Backline
 flask --app backline run         # http://127.0.0.1:5000
@@ -184,8 +225,9 @@ BACKLINE_SECRET_KEY=... BACKLINE_DATABASE=/srv/backline/backline.sqlite3 BACKLIN
 | `BACKLINE_BEHIND_PROXY` | Set when running behind a reverse proxy. Trusts `X-Forwarded-*` headers and marks cookies Secure. |
 | `BACKLINE_UPLOADS` | Folder for uploaded event documents. Default: `instance/uploads`. |
 | `BACKLINE_MAX_UPLOAD_MB` | Largest upload accepted at once, in MB. Default: 50. |
+| `BACKLINE_QBO_CLIENT_ID`, `BACKLINE_QBO_CLIENT_SECRET` | Optional. Your Intuit app's keys, instead of entering them under Settings → QuickBooks. |
 
-**Backups:** your data lives in the SQLite database file, and uploaded documents live in the `uploads` folder. Back up both on a schedule. The simplest way is to copy the whole `instance` folder, or run `sqlite3 backline.sqlite3 ".backup backup.sqlite3"` for the database.
+**Backups:** your data lives in the SQLite database file, and uploaded documents live in the `uploads` folder. Back up both on a schedule. The database also holds the QuickBooks sign-in when connected, so keep backups private. The simplest way is to copy the whole `instance` folder, or run `sqlite3 backline.sqlite3 ".backup backup.sqlite3"` for the database.
 
 ## Tests
 
@@ -204,6 +246,11 @@ The suite covers:
 - vehicles and transport: fleet management, company and third-party vehicles on events, double-booking and maintenance warnings, expiring paperwork, and the worksheet section
 - documents: upload, download (inline vs. attachment), rejecting unsafe or empty files, crew seeing only shared files, cleanup when files or events are deleted, and the friendly "too large" message
 - branding: the logo on every page, replacing and resetting it from Settings, and rejecting files that aren't real images
+- QuickBooks, against an in-memory stand-in for QuickBooks (tests never touch the network):
+  - connecting, and refusing sign-ins that didn't start in this browser
+  - customers and invoices (lines, tax flags, discount, deposits), edits and voids
+  - payments in both directions, including changes, deletions, split payments and ones QuickBooks refuses
+  - sign-in refresh, a revoked connection, throttled automatic checks, and switching companies
 - event types driving labels, the run-of-show starter, checklists (applied in order) and specs, plus managing types
 - worksheet sections and privacy: only the viewer's own pay, crew-only notes kept from clients, office-only checklist items hidden
 - crew chat and calendar invites
@@ -223,9 +270,10 @@ backline/
   forms.py           declarative form fields + validation
   services.py        gear and vehicle availability, totals, invoice math, crew pay, contract rendering, iCal export
   files.py           event document storage (uploads folder, allowed types, downloads)
+  quickbooks.py      QuickBooks Online: sign-in, sending invoices and payments, bringing payments back
   seed.py            Chicago demo data
   views/             dashboard, events (crew/gear/checklists/chat/calendar), inventory,
-                     people (clients/venues/crew), contracts, invoices, crewpay, settings,
+                     people (clients/venues/crew), contracts, invoices, crewpay, settings, quickbooks,
                      public (crew worksheets, contract signing, client invoices)
   templates/, static/ (static/brand/ holds the logo and icons)
 tests/
@@ -234,6 +282,7 @@ tests/
 ## Known limits / ideas for next steps
 
 - Email goes through `mailto:` links. Sending automatically (SMTP, Postmark, etc.), texting crew their worksheet link, and push notifications for new chat messages would be natural additions.
-- There are no online payments. A Stripe payment link on the client invoice page would be a small addition.
+- Online payments go through QuickBooks Payments when QuickBooks is connected. Paying crew through Zelle, Venmo or similar is on hold.
 - The e-signature is a typed name plus an agreement checkbox, with a time and IP audit record. Check that this meets Illinois requirements. The default contract and crew policy text is a starting point, not legal advice.
-- Possible additions: a per-crew iCal feed of all their calls, stage plot and input list uploads, gear "kits", and barcode scanning for check-in and check-out.
+- Possible additions: a per-crew iCal feed of all their calls, gear "kits", and barcode scanning for check-in and check-out.
+- Planned: an AI import page that reads emails, input lists, schedules and tech packs and proposes changes for you to approve.

@@ -4,6 +4,7 @@ from decimal import Decimal, InvalidOperation
 from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
 
 from .. import db, forms, services, util
+from .. import quickbooks as qb
 from ..forms import Field
 from .events import client_choices
 
@@ -58,6 +59,27 @@ def invoice_bundle(invoice):
     )
 
 
+def quickbooks_view(invoice, totals):
+    """What the invoice page shows about the QuickBooks copy."""
+    view = {"connected": qb.is_connected(), "url": qb.invoice_url(invoice["qbo_id"]) if invoice["qbo_id"] else None,
+            "differences": []}
+    if invoice["qbo_id"] and invoice["qbo_total"] is not None and invoice["status"] != "void":
+        if util.round_money(invoice["qbo_total"]) != totals["total"]:
+            view["differences"].append(
+                f"QuickBooks shows a total of {util.money(invoice['qbo_total'])}, but this invoice totals "
+                f"{util.money(totals['total'])}. Check the sales tax and discount in QuickBooks.")
+        elif invoice["qbo_balance"] is not None and util.round_money(invoice["qbo_balance"]) != totals["balance"]:
+            view["differences"].append(
+                f"QuickBooks shows {util.money(invoice['qbo_balance'])} still owed, but {util.money(totals['balance'])} "
+                "here. A payment or credit may have changed in QuickBooks; check for payments.")
+    return view
+
+
+def _warn(message):
+    if message:
+        flash(message, "warn")
+
+
 def _clean_header(data, errors):
     if data.get("tax_rate") is None:
         data["tax_rate"] = 0
@@ -71,6 +93,7 @@ def _clean_header(data, errors):
 
 @bp.route("/invoices")
 def index():
+    qb.maybe_check()
     status_filter = request.args.get("status", "")
     rows = []
     for inv in db.query(
@@ -94,6 +117,7 @@ def index():
     return render_template(
         "invoices/list.html", rows=rows, status=status_filter, outstanding=outstanding, overdue=overdue,
         collected=collected, statuses=["draft", "sent", "partial", "overdue", "paid", "void"],
+        qbo_connected=qb.is_connected(), qbo_last_check=db.get_setting("qbo_last_check"),
     )
 
 
@@ -186,6 +210,7 @@ def edit(invoice_id):
                 )
             conn.commit()
             flash("Invoice saved.", "ok")
+            _warn(qb.after_change(invoice_id))
             return redirect(url_for("invoices.detail", invoice_id=invoice_id))
         items = lines
     return render_template("invoices/edit.html", invoice=invoice, values=values, errors=errors,
@@ -196,6 +221,7 @@ def edit(invoice_id):
 def detail(invoice_id):
     bundle = invoice_bundle(get_invoice(invoice_id))
     return render_template("invoices/detail.html", **bundle, payment_fields=PAYMENT_FIELDS,
+                           qbo=quickbooks_view(bundle["invoice"], bundle["totals"]),
                            payment_defaults={"paid_on": util.today().isoformat(),
                                              "amount": f"{max(bundle['totals']['balance'], 0):.2f}"})
 
@@ -210,9 +236,29 @@ def set_status(invoice_id):
     source, target = transitions[action]
     if (source and invoice["status"] != source) or invoice["status"] == target:
         abort(400)
+    if invoice["qbo_id"] and action in ("unsend", "reopen"):
+        flash("This invoice is in QuickBooks, so it can't go back to a draft. Edit it (changes are copied to "
+              "QuickBooks), or void it and create a new one.", "bad")
+        return redirect(url_for("invoices.detail", invoice_id=invoice_id))
     db.update("invoices", invoice_id, {"status": target})
     flash({"send": "Marked as sent. Share the invoice link with your client.",
            "unsend": "Back to draft.", "void": "Invoice voided.", "reopen": "Invoice reopened as a draft."}[action], "ok")
+    if action == "send":
+        _warn(qb.after_change(invoice_id))
+    elif action == "void" and not invoice["qbo_id"]:
+        db.update("invoices", invoice_id, {"qbo_error": None})  # never sent, so nothing to fix in QuickBooks
+    elif action == "void":
+        if not qb.is_connected():
+            qb.note_error(invoice_id, qb.QuickBooksError("Voided here while QuickBooks was disconnected. "
+                                                         "Void it in QuickBooks too."))
+            _warn("QuickBooks isn't connected, so void this invoice in QuickBooks too.")
+        else:
+            try:
+                qb.void_invoice(invoice_id)
+            except qb.QuickBooksError as exc:
+                _warn(f"Voided here, but not in QuickBooks: {exc} Void it in QuickBooks too.")
+            else:
+                flash("Voided in QuickBooks too.", "ok")
     return redirect(url_for("invoices.detail", invoice_id=invoice_id))
 
 
@@ -229,12 +275,18 @@ def add_payment(invoice_id):
         if invoice["status"] == "draft":
             db.update("invoices", invoice_id, {"status": "sent"})
         flash(f"Recorded {util.money(data['amount'])} payment.", "ok")
+        _warn(qb.after_change(invoice_id, payment_only=True))
     return redirect(url_for("invoices.detail", invoice_id=invoice_id))
 
 
 @bp.route("/invoices/<int:invoice_id>/payments/<int:payment_id>/delete", methods=["POST"])
 def delete_payment(invoice_id, payment_id):
     get_invoice(invoice_id)
+    payment = db.query("SELECT * FROM payments WHERE id = ? AND invoice_id = ?", (payment_id, invoice_id), one=True)
+    if payment and payment["qbo_payment_id"]:
+        flash("This payment is in QuickBooks. Delete or void it there; it disappears here the next time "
+              "QuickBooks is checked.", "bad")
+        return redirect(url_for("invoices.detail", invoice_id=invoice_id))
     db.execute("DELETE FROM payments WHERE id = ? AND invoice_id = ?", (payment_id, invoice_id))
     flash("Payment removed.", "ok")
     return redirect(url_for("invoices.detail", invoice_id=invoice_id))

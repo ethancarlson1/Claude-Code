@@ -3,6 +3,7 @@ from datetime import timedelta
 from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
 
 from .. import db, forms, services, util
+from .. import quickbooks as qb
 from ..forms import Field
 
 bp = Blueprint("contracts", __name__)
@@ -127,8 +128,12 @@ def record_deposit(contract_id):
     if errors:
         flash(" ".join(errors.values()), "bad")
     else:
-        services.record_contract_deposit(contract, data["paid_on"], data["amount"], data["method"], data["reference"])
+        invoice_id = services.record_contract_deposit(contract, data["paid_on"], data["amount"], data["method"],
+                                                      data["reference"])
         flash(f"Recorded {util.money(data['amount'])} received on {util.fdate(data['paid_on'], 'short')}.", "ok")
+        warning = qb.after_change(invoice_id, payment_only=True)
+        if warning:
+            flash(warning, "warn")
     return redirect(url_for("contracts.detail", contract_id=contract_id))
 
 

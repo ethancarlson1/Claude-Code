@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf, copy_link %}
+{% block title %}QuickBooks{% endblock %}
+{% block heading %}<h1>Settings</h1>{% endblock %}
+{% block content %}
+{% include "settings/_tabs.html" %}
+{% if settings.qbo_last_error %}<div class="alert-box">{{ settings.qbo_last_error }}</div>{% endif %}
+<div class="stack" style="max-width:860px">
+  <section class="card">
+    <h2>QuickBooks Online</h2>
+    {% if connected %}
+      <p>Connected to <strong>{{ settings.qbo_company_name }}</strong>
+        <span class="badge badge-{{ 'warn' if environment == 'sandbox' else 'ok' }}">{{ 'Sandbox' if environment == 'sandbox' else 'Production' }}</span>
+        <span class="muted small">since {{ (settings.qbo_connected_at or '')[:10]|fdate('short') }} · {{ linked }} invoice{{ 's' if linked != 1 }} linked</span></p>
+      {% if settings.qbo_last_check %}<p class="small muted">Last checked for payments {{ settings.qbo_last_check|fdatetime }}.</p>{% endif %}
+      <div class="form-row">
+        <form method="post" action="{{ url_for('quickbooks.check') }}" class="inline">{{ csrf() }}<button class="btn" type="submit">Check for payments now</button></form>
+        <form method="post" action="{{ url_for('quickbooks.disconnect') }}" class="inline" data-confirm="Disconnect from QuickBooks? Nothing is deleted, and you can reconnect any time.">{{ csrf() }}<button class="btn btn-danger" type="submit">Disconnect</button></form>
+      </div>
+    {% else %}
+      <p>Connect your QuickBooks Online company to send invoices there. Clients can then pay through QuickBooks, and their payments show up here.</p>
+      {% if client_id and has_secret %}
+        <form method="post" action="{{ url_for('quickbooks.connect') }}">{{ csrf() }}<button class="btn btn-primary" type="submit">Connect to QuickBooks</button></form>
+        <p class="help" style="margin-top:.5rem">You'll sign in to Intuit and choose a company, then come back here.</p>
+      {% else %}
+        <p class="muted">First add your Intuit app keys below.</p>
+      {% endif %}
+    {% endif %}
+    {% if environment == 'sandbox' %}
+      <p class="help" style="margin-top:.8rem">The sandbox is Intuit's practice company. Try it with the demo data, not your real bookings, then switch to Production when you're ready.</p>
+    {% endif %}
+  </section>
+
+  {% if connected %}
+  <section class="card">
+    <h2>How invoices are sent</h2>
+    {% if list_error %}<div class="alert-box">Couldn't load your QuickBooks lists: {{ list_error }}</div>{% endif %}
+    <form method="post">
+      {{ csrf() }}<input type="hidden" name="action" value="options">
+      <div class="grid-form">
+        <div class="field{% if not settings.qbo_item_id %} has-error{% endif %}">
+          <label for="qbo_item_id">Product/service for invoice lines</label>
+          <select id="qbo_item_id" name="qbo_item_id">
+            <option value="">Choose…</option>
+            {% for id, name in items %}<option value="{{ id }}" {% if id == settings.qbo_item_id %}selected{% endif %}>{{ name }}</option>{% endfor %}
+          </select>
+          <div class="help">Where equipment, labor and other lines post in QuickBooks, e.g. “Audio &amp; backline services”. Ask your accountant which one to use.</div>
+        </div>
+        <div class="field">
+          <label for="qbo_deposit_item_id">Contract deposits &amp; balances</label>
+          <select id="qbo_deposit_item_id" name="qbo_deposit_item_id">
+            <option value="">Same as invoice lines</option>
+            {% for id, name in items %}<option value="{{ id }}" {% if id == settings.qbo_deposit_item_id %}selected{% endif %}>{{ name }}</option>{% endfor %}
+          </select>
+          <div class="help">Some accountants post deposits to their own product/service.</div>
+        </div>
+        <div class="field">
+          <label for="qbo_tax_code_id">Sales tax</label>
+          <select id="qbo_tax_code_id" name="qbo_tax_code_id">
+            <option value="">Let QuickBooks work it out</option>
+            {% for id, name in taxes %}<option value="{{ id }}" {% if id == settings.qbo_tax_code_id %}selected{% endif %}>{{ name }}</option>{% endfor %}
+          </select>
+          <div class="help">Taxable lines are marked taxable in QuickBooks, and QuickBooks calculates the tax. If its total differs from this platform's, the invoice shows a warning.</div>
+        </div>
+      </div>
+      <div style="margin-top:.8rem">
+        {% for key, label in flags %}
+          <label class="check"><input type="checkbox" name="{{ key }}" value="1" {% if settings[key] == '1' %}checked{% endif %}> {{ label }}</label>
+        {% endfor %}
+      </div>
+      <div class="form-actions"><button class="btn btn-primary" type="submit">Save options</button></div>
+    </form>
+  </section>
+  {% endif %}
+
+  <section class="card">
+    <h2>Intuit app keys</h2>
+    <p class="small">QuickBooks only lets registered apps connect. Registering one is free, and you only do it once:</p>
+    <ol class="small">
+      <li>Sign in at <strong>developer.intuit.com</strong> with your Intuit account and create an app for QuickBooks Online, with the <em>Accounting</em> permission.</li>
+      <li>On the app's keys page, add this exact address as a <strong>Redirect URI</strong>:
+        <div style="margin:.4rem 0">{{ copy_link(redirect_uri) }}</div>
+        If Intuit won't accept it, open this platform at <span class="mono">http://localhost:5000</span> instead and use the address shown then. Production keys need a secure (https) address, so they're for when the platform is online.</li>
+      <li>Copy the app's <strong>Client ID</strong> and <strong>Client Secret</strong> below. Sandbox (development) and Production have different keys.</li>
+    </ol>
+    <form method="post">
+      {{ csrf() }}<input type="hidden" name="action" value="keys">
+      <div class="grid-form">
+        <div class="field">
+          <label for="environment">Environment</label>
+          <select id="environment" name="environment">
+            {% for value, label in environments %}<option value="{{ value }}" {% if value == environment %}selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select>
+        </div>
+        {% if env_keys %}
+          <div class="field wide"><p class="help">The Client ID and Secret are set by environment variables on the server.</p></div>
+        {% else %}
+          <div class="field">
+            <label for="client_id">Client ID</label>
+            <input id="client_id" name="client_id" value="{{ client_id }}" autocomplete="off" spellcheck="false">
+          </div>
+          <div class="field">
+            <label for="client_secret">Client Secret</label>
+            <input id="client_secret" name="client_secret" type="password" autocomplete="new-password" placeholder="{{ 'Saved. Leave blank to keep it' if has_secret else '' }}">
+          </div>
+        {% endif %}
+      </div>
+      <div class="form-actions"><button class="btn" type="submit">Save keys</button></div>
+    </form>
+  </section>
+</div>
+{% endblock %}

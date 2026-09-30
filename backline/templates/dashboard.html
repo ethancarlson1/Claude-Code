@@ -96,6 +96,20 @@
     </section>
     {% endif %}
 
+    {% if qbo_problem or qbo_problems %}
+    <section class="card">
+      <h2>QuickBooks</h2>
+      {% if qbo_problem %}<p class="small">{{ qbo_problem }} <a href="{{ url_for('quickbooks.settings') }}">Settings → QuickBooks</a></p>{% endif %}
+      {% if qbo_problems %}
+      <ul class="checklist">
+        {% for i in qbo_problems %}
+          <li><span class="text"><a href="{{ url_for('invoices.detail', invoice_id=i.id) }}#quickbooks">{{ i.number }}</a> — {{ i.qbo_error }}</span></li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </section>
+    {% endif %}
+
     {% if deposits_overdue %}
     <section class="card">
       <h2>Deposits overdue</h2>
