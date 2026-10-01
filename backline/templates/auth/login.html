@@ -5,17 +5,27 @@
 {% block shell %}
 <main class="auth-card card">
   <div class="auth-logo"><img src="{{ logo_url }}" alt="{{ company_name }}"></div>
+  {% if demo %}
+  <h1>Take a look around</h1>
+  <p>This is a working demo of the Chicago Sound and Backline operations platform, filled with made-up events, crew, clients and invoices.</p>
+  <form method="post" action="{{ url_for('auth.demo_enter') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <button class="btn btn-primary btn-block" type="submit">Explore the demo</button></form>
+  <p class="help" style="margin-top:.8rem">Also try what clients and crew see: the <a href="{{ url_for('intake.form') }}">event request form</a>, and crew worksheets from any event's Crew tab.</p>
+  {% else %}
   <h1>Sign in</h1>
   <p class="muted">Events, gear, crew and billing in one place.</p>
+  {% endif %}
   {% with messages = get_flashed_messages(with_categories=true) %}
     {% for category, message in messages %}<div class="flash flash-{{ category }}">{{ message }}</div>{% endfor %}
   {% endwith %}
   {% if error %}<div class="flash flash-bad">{{ error }}</div>{% endif %}
+  {% if not demo %}
   <form method="post">
     {{ csrf() }}
     <div class="field"><label for="username">Username</label><input id="username" name="username" autocomplete="username" required autofocus></div>
     <div class="field"><label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required></div>
     <button class="btn btn-primary btn-block" type="submit">Sign in</button>
   </form>
+  {% endif %}
 </main>
 {% endblock %}

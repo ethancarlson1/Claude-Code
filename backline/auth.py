@@ -17,7 +17,7 @@ from flask import (
 )
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from . import db, util
+from . import db, demo, util
 
 bp = Blueprint("auth", __name__)
 
@@ -64,6 +64,10 @@ def _gate():
         if db.scalar("SELECT COUNT(*) FROM users") == 0:
             return redirect(url_for("auth.setup"))
         return redirect(url_for("auth.login", next=request.full_path))
+    if request.method == "POST" and request.endpoint in demo.BLOCKED and demo.enabled():
+        flash(demo.BLOCKED_MESSAGE, "warn")
+        back = request.referrer or ""
+        return redirect(back if back.startswith(request.host_url) else url_for("dashboard.index"))
     return None
 
 
@@ -141,6 +145,30 @@ def login():
     return render_template("auth/login.html", error=error)
 
 
+@bp.route("/demo/enter", methods=["POST"])
+def demo_enter():
+    """Demo mode: one click to look around, no account needed."""
+    if not demo.enabled():
+        abort(404)
+    demo.prepare()
+    session.clear()
+    session["user_id"] = demo.user_id()
+    return redirect(url_for("dashboard.index"))
+
+
+@bp.route("/demo/reset", methods=["POST"])
+def demo_reset():
+    if not demo.enabled():
+        abort(404)
+    if g.user is None:
+        return redirect(url_for("auth.login"))
+    demo.reset()
+    session.clear()
+    session["user_id"] = demo.user_id()
+    flash("The demo is back to its starting point.", "ok")
+    return redirect(url_for("dashboard.index"))
+
+
 @bp.route("/logout", methods=["POST"])
 def logout():
     session.clear()
@@ -160,4 +188,5 @@ def init_app(app):
             "current_user": g.get("user"),
             "logo_url": url_for("public.logo", v=db.get_setting("logo_file") or "default"),
             "new_requests": db.scalar("SELECT COUNT(*) FROM client_requests WHERE status = 'new'") if g.get("user") else 0,
+            "demo": demo.enabled(),
         }

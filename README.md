@@ -281,6 +281,40 @@ Render sets up the https certificate. Then link your website's "Request a quote"
 - **Sign-in protection:** after 5 wrong passwords for one username from one network (or 20 for any usernames), sign-in from that network pauses for 15 minutes.
 - **Logs:** the service's **Logs** tab shows what the platform is doing, which helps when something goes wrong.
 
+## Free demo site
+
+To show people what the platform does without paying for hosting or touching real data, run it in **demo mode** on Render's free plan.
+
+**What visitors get**
+- The sample Chicago data: events of every type, crew, gear, contracts, invoices, crew pay and two client requests.
+- A sign-in page with one **Explore the demo** button; no account needed.
+- They can click through everything and try it: create and edit events, build gear lists, tick checklists, open crew worksheets, send the request form, and turn a request into an inquiry.
+- Changes that would lock others out or reach outside services are turned off: users and passwords, company details and logo, QuickBooks, restoring backups, and switching the request form off.
+- A banner on every page says it's a demo, with a **Start over** button that puts the sample data back.
+- The demo is hidden from search engines, and uploads are limited to 5 MB.
+
+**Setting it up on Render (free)**
+1. In Render: **New → Web Service**. Use a plain web service, not a Blueprint, because the Blueprint is for the paid live site.
+2. Connect GitHub and pick this repository and its branch.
+3. Fill in:
+   - **Name:** for example `csb-demo` (the address becomes `https://csb-demo.onrender.com`)
+   - **Language:** Python 3
+   - **Region:** Ohio
+   - **Build command:** `pip install -r requirements.txt`
+   - **Start command:** `waitress-serve --host=0.0.0.0 --port=$PORT --threads=4 --no-clear-untrusted-proxy-headers --call backline:create_app`
+   - **Instance type:** Free
+4. Under **Environment variables**, add:
+   - `BACKLINE_DEMO` = `1`
+   - `BACKLINE_BEHIND_PROXY` = `1`
+   - `BACKLINE_SECRET_KEY` = any long random text (Render's **Generate** button works)
+5. Optional: under **Advanced**, set the **Health Check Path** to `/healthz`.
+6. Click **Deploy**. When it says **Live**, open the address and click **Explore the demo**.
+
+**Good to know**
+- A free service goes to sleep after about 15 minutes without visitors. The next visit takes up to a minute to wake it, so open the link a minute before a meeting.
+- Every time it wakes up or redeploys, it starts again with fresh sample data.
+- Never put real bookings in the demo. Use the paid live site for those.
+
 ## Running it elsewhere
 
 Any host that runs a Python web app over https and keeps files between restarts works. The platform needs somewhere to keep its SQLite database and uploads. For example, on a small server behind Caddy or nginx:
@@ -300,6 +334,7 @@ BACKLINE_SECRET_KEY=... BACKLINE_DATABASE=/srv/backline/backline.sqlite3 BACKLIN
 | `BACKLINE_UPLOADS` | Folder for uploaded event documents. Default: `instance/uploads`. |
 | `BACKLINE_BEHIND_PROXY` | Set when running behind a reverse proxy. Trusts the last `X-Forwarded-*` values and marks cookies Secure. |
 | `BACKLINE_SETUP_CODE` | Recommended on a public server. The code needed to create the first account. |
+| `BACKLINE_DEMO` | Set to `1` for the public demo (see *Free demo site*). Never on the live site. |
 | `BACKLINE_MAX_UPLOAD_MB` | Largest upload accepted at once, in MB. Default: 50. |
 | `BACKLINE_MAX_RESTORE_MB` | Largest backup that can be restored, in MB. Default: 500. |
 | `BACKLINE_QBO_CLIENT_ID`, `BACKLINE_QBO_CLIENT_SECRET` | Optional. Your Intuit app's keys, instead of entering them under Settings → QuickBooks. |
@@ -324,6 +359,7 @@ The suite covers:
 - documents: upload, download (inline vs. attachment), rejecting unsafe or empty files, crew seeing only shared files, cleanup when files or events are deleted, and the friendly "too large" message
 - branding: the logo on every page, replacing and resetting it from Settings, and rejecting files that aren't real images
 - the event request form: only name and contact required, forgiving answers, keeping answers on errors, spam protection, uploads, turning it off, the inbox, creating an inquiry (client/venue matching, every mapped field, checklists, files), adding to an existing event without overwriting, archiving and deleting
+- demo mode: sample data and one-click entry on startup, the banner and search-engine opt-out, what's turned off, Start over, the 5 MB upload limit, and no demo routes on the real platform
 - going live: the health check, https links and Secure cookies behind a proxy, the setup code, sign-in lockout, password resets (in Settings and from the command line), backups, and restoring only onto an empty platform (including an old-version backup and unsafe file paths)
 - QuickBooks, against an in-memory stand-in for QuickBooks (tests never touch the network):
   - connecting, and refusing sign-ins that didn't start in this browser
@@ -352,6 +388,7 @@ backline/
   quickbooks.py      QuickBooks Online: sign-in, sending invoices and payments, bringing payments back
   intake.py          the event request form: questions, reading answers, turning a request into an event
   backup.py          backup downloads and restoring onto an empty platform
+  demo.py            demo mode for the free showcase site
   seed.py            Chicago demo data
   views/             dashboard, events (crew/gear/checklists/chat/calendar), inventory,
                      people (clients/venues/crew), contracts, invoices, crewpay, settings, quickbooks,

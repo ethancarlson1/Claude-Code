@@ -6,7 +6,7 @@ import secrets
 
 from flask import Flask, flash, redirect, request
 
-from . import db, files, util
+from . import db, demo, files, util
 
 
 def _load_secret_key(instance_path):
@@ -37,7 +37,8 @@ def create_app(test_config=None):
         SESSION_COOKIE_SAMESITE="Lax",
         UPLOAD_FOLDER=os.environ.get("BACKLINE_UPLOADS", os.path.join(app.instance_path, "uploads")),
         # Largest request accepted: covers a batch of event documents (tech packs can be big).
-        MAX_CONTENT_LENGTH=int(os.environ.get("BACKLINE_MAX_UPLOAD_MB", "50")) * 1024 * 1024,
+        MAX_CONTENT_LENGTH=int(os.environ.get("BACKLINE_MAX_UPLOAD_MB",
+                                              demo.UPLOAD_LIMIT_MB if demo.enabled() else "50")) * 1024 * 1024,
     )
     if test_config:
         app.config.update(test_config)
@@ -86,5 +87,7 @@ def create_app(test_config=None):
 
     with app.app_context():
         db.init_db()
+        if demo.enabled():
+            demo.prepare()
 
     return app

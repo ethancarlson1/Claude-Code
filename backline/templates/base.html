@@ -8,8 +8,15 @@
   <link rel="icon" type="image/png" href="{{ url_for('static', filename='brand/favicon.png') }}">
   <link rel="apple-touch-icon" href="{{ url_for('static', filename='brand/apple-touch-icon.png') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  {% if demo %}<meta name="robots" content="noindex, nofollow">{% endif %}
 </head>
 <body class="{% block body_class %}app{% endblock %}">
+{% if demo %}
+<div class="demo-banner no-print">
+  <strong>Demo</strong> with made-up people, events and money. Look around and try things; changes are wiped when the demo restarts.
+  {% if current_user %}<form method="post" action="{{ url_for('auth.demo_reset') }}" class="inline" data-confirm="Put the demo back to its starting point?"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="link" type="submit">Start over</button></form>{% endif %}
+</div>
+{% endif %}
 {% block shell %}
 <div class="layout">
   <nav class="sidebar" id="sidebar">

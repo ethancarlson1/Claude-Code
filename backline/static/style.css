@@ -263,6 +263,10 @@ body.auth-page { display: grid; place-items: center; min-height: 100vh; padding:
 /* Printable documents (worksheet, contract, invoice) */
 body.doc-page { background: var(--bg); }
 
+.demo-banner { background: var(--brand); color: #04121c; text-align: center; font-size: .85rem; padding: .4rem 1rem; }
+.demo-banner .link { color: #04121c; text-decoration: underline; font-weight: 650; margin-left: .4rem; }
+body.auth-page .demo-banner { position: fixed; top: 0; left: 0; right: 0; z-index: 30; }
+
 /* Public event request form */
 body.intake-page { background: var(--bg); }
 .intake { max-width: 780px; margin: 0 auto; padding: 1.5rem 1rem 3rem; }
