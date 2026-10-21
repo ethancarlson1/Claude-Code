@@ -345,7 +345,10 @@ CREATE TABLE IF NOT EXISTS client_requests (
     event_id INTEGER REFERENCES events(id) ON DELETE SET NULL,  -- the event it became or was added to
     ip TEXT,
     created_at TEXT NOT NULL,
-    handled_at TEXT
+    handled_at TEXT,
+    source TEXT NOT NULL DEFAULT 'form',         -- form (the public request form) | import (documents read by AI)
+    suggested_event_id INTEGER REFERENCES events(id) ON DELETE SET NULL,  -- imports: the event the AI matched
+    ai_details TEXT                              -- imports: model, cost, quotes, other details (JSON, see ai_import.py)
 );
 CREATE INDEX IF NOT EXISTS idx_client_requests_status ON client_requests(status, created_at);
 
@@ -358,6 +361,19 @@ CREATE TABLE IF NOT EXISTS client_request_files (
     stored_name TEXT NOT NULL UNIQUE,
     size INTEGER NOT NULL DEFAULT 0
 );
+
+-- Each AI import, for the spending summary in Settings → AI import.
+CREATE TABLE IF NOT EXISTS ai_usage (
+    id INTEGER PRIMARY KEY,
+    created_at TEXT NOT NULL,
+    model TEXT NOT NULL,
+    input_tokens INTEGER NOT NULL DEFAULT 0,
+    output_tokens INTEGER NOT NULL DEFAULT 0,
+    cost REAL NOT NULL DEFAULT 0,                -- estimated, in dollars
+    outcome TEXT NOT NULL DEFAULT 'ok',          -- ok | declined | too long | unreadable answer
+    request_id INTEGER REFERENCES client_requests(id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS idx_ai_usage_created ON ai_usage(created_at);
 
 -- Wrong passwords at sign-in, used to slow down password guessing.
 CREATE TABLE IF NOT EXISTS login_failures (

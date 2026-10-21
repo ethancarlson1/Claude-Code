@@ -25,6 +25,7 @@ BLOCKED = {
     "quickbooks.settings", "quickbooks.connect", "quickbooks.disconnect", "quickbooks.push", "quickbooks.check",
     "backups.restore",
     "requests.toggle_form",
+    "imports.new", "imports.settings",  # AI import uses a paid service
 }
 BLOCKED_MESSAGE = ("That's turned off in the demo, so nobody can change sign-ins, branding or outside "
                    "connections. Everything else works.")

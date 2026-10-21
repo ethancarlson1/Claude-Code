@@ -177,7 +177,7 @@ input, select, textarea {
   background: var(--surface); color: var(--text); width: 100%; min-width: 0;
 }
 input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
-input[type=checkbox] { width: auto; accent-color: var(--accent); }
+input[type=checkbox], input[type=radio] { width: auto; accent-color: var(--accent); }
 textarea { resize: vertical; }
 label.check { display: flex; align-items: center; gap: .5rem; font-weight: 500; }
 label.check input { flex: none; }
@@ -388,6 +388,22 @@ body.intake-page { background: var(--bg); }
 /* Event chat in the office view */
 .chat-admin .msg { border: 1px solid var(--border); border-radius: 10px; padding: .5rem .8rem; margin: .5rem 0; background: var(--surface-2); }
 .chat-admin .msg.staff { background: var(--accent-soft); }
+
+/* AI import */
+.ai-card { border-left: 4px solid var(--info); }
+form[data-ai-import] .field { margin-bottom: 1rem; }
+.choice-list { display: grid; gap: .8rem; }
+.choice-list label.check { align-items: flex-start; font-weight: 400; }
+.choice-list input { margin-top: .25rem; flex: none; }
+.ai-quote { display: block; margin-top: .2rem; font-size: .82rem; font-style: italic; color: var(--muted); overflow-wrap: anywhere; }
+.ai-busy { display: flex; align-items: center; gap: .6rem; margin-top: .8rem; font-weight: 600; }
+.ai-busy[hidden] { display: none; }
+.spinner { width: 1.1rem; height: 1.1rem; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%;
+  animation: spin .8s linear infinite; flex: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.4s; } }
+ol.steps { padding-left: 1.2rem; margin: 0 0 .8rem; }
+ol.steps li { margin-bottom: .5rem; }
 
 @media print {
   body, body.doc-page { background: #fff; }

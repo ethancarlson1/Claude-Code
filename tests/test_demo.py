@@ -32,7 +32,7 @@ def _count(app, table):
 
 
 def test_demo_starts_with_sample_data_and_one_click_entry(demo_app):
-    assert _count(demo_app, "events") > 5 and _count(demo_app, "client_requests") == 2
+    assert _count(demo_app, "events") > 5 and _count(demo_app, "client_requests") == 3
     assert [u["username"] for u in query(demo_app, "SELECT username FROM users")] == ["demo"]
     c = demo_app.test_client()
     assert c.get("/setup").headers["Location"] == "/login"
@@ -68,6 +68,8 @@ def test_visitors_can_try_the_real_features(visitor, demo_app):
     ("/settings/quickbooks/connect", {}),
     ("/requests/form", {"enabled": "0"}),
     ("/settings/backup/restore", {"confirm": "1"}),
+    ("/requests/import", {"pasted": "Party on June 5"}),
+    ("/settings/ai", {"model": "claude-haiku-5-5"}),
 ])
 def test_some_changes_are_turned_off(visitor, demo_app, url, data):
     before = {t: _count(demo_app, t) for t in ("users", "settings")}
@@ -79,6 +81,21 @@ def test_some_changes_are_turned_off(visitor, demo_app, url, data):
     with demo_app.app_context():
         assert (dbm.get_setting("company_name"), dbm.get_setting("request_form_enabled")) == (company, form_on)
         assert not dbm.get_setting("qbo_client_id")
+
+
+def test_ai_import_is_shown_with_a_sample(visitor, demo_app):
+    page = visitor.get("/requests/import").data.decode()
+    assert "turned off in the demo because it uses a paid AI service" in page and "disabled>Read with AI" in page
+    sample = query(demo_app, "SELECT * FROM client_requests WHERE source = 'import'", one=True)
+    assert f"/requests/{sample['id']}" in page
+    page = visitor.get(f"/requests/{sample['id']}").data.decode()
+    assert "What the AI found" in page and "“expect about 300 guests”" in page
+    assert "The AI thinks this is about" in page and "Lakeview Youth Arts Spring Gala" in page
+    resp = visitor.post(f"/requests/{sample['id']}/add-to-event", data={"event_id": sample["suggested_event_id"]},
+                        follow_redirects=True)
+    assert b"Added request" in resp.data  # visitors can try the rest of the flow
+    event = query(demo_app, "SELECT * FROM events WHERE id = ?", (sample["suggested_event_id"],), one=True)
+    assert event["load_in_time"] == "13:00" and "Crew meals provided at 5 PM" in event["notes"]
 
 
 def test_start_over_puts_the_sample_data_back(visitor, demo_app):

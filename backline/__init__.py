@@ -70,6 +70,7 @@ def create_app(test_config=None):
         crewpay,
         dashboard,
         events,
+        imports,
         intake,
         inventory,
         invoices,
@@ -82,7 +83,7 @@ def create_app(test_config=None):
 
     auth.init_app(app)
     for module in (dashboard, events, inventory, people, contracts, invoices, crewpay, public, settings, quickbooks,
-                   intake, requests, backups):
+                   intake, requests, imports, backups):
         app.register_blueprint(module.bp)
 
     with app.app_context():

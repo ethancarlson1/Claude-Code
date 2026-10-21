@@ -5,6 +5,7 @@ and emails are fictional placeholders."""
 
 import json
 from datetime import datetime, timedelta
+from email.message import EmailMessage
 
 from . import db, files, intake, services, util
 
@@ -583,12 +584,13 @@ def seed():
     _invoice(past, "sent", today - timedelta(days=9), today - timedelta(days=2))
 
     # 9. Gala inquiry with no details yet.
-    _event(title="Lakeview Youth Arts Spring Gala", event_type="Fundraiser / Gala", status="inquiry",
+    gala = _event(title="Lakeview Youth Arts Spring Gala", event_type="Fundraiser / Gala", status="inquiry",
            client_id=client["Lakeview Youth Arts Fund"], event_date=day(45), guest_count=300,
            service_type="Full production (PA, backline, crew)",
            notes="Asked for a quote: podium + 4 wireless for speakers and the auctioneer, jazz trio backline, dance set.")
 
     _seed_requests(day)
+    _seed_import(day, gala)
 
 
 def _seed_requests(day):
@@ -631,3 +633,95 @@ def _seed_requests(day):
                 boxes=[(80, 460, 160, 60, "Bar"), (380, 460, 150, 80, "DJ corner"), (240, 330, 120, 40, "Elevator")]))
             db.insert("client_request_files", {"request_id": request_id, "original_name": original,
                                                "stored_name": stored, "size": size})
+
+
+def _seed_import(day, gala):
+    """An email read by AI (made up here, so the demo needs no API key): details for the gala inquiry."""
+    when = datetime.fromisoformat(day(45)).strftime("%A, %B %-d")
+    body = f"""Hi team,
+
+Following up on our call about the Lakeview Youth Arts Spring Gala on {when}. We're at the Harborview Ballroom this year and expect about 300 guests.
+
+Load-in: the venue lets us in from 1 PM. The dock is on the side street and the freight elevator goes straight to the ballroom level. You can keep two vehicles at the dock until 5 PM, then the attached garage (we'll validate).
+
+Timeline:
+6:00 PM Doors and cocktails
+7:00 PM Dinner (the Northside Jazz Trio plays)
+7:45 PM Program: 4 speakers
+8:15 PM Live auction
+9:30 PM DJ and dancing until 11
+Everything has to be out by 11:30 PM.
+
+Gear: a podium mic plus 4 handheld wireless for the speakers and the auctioneer. The trio brings their own instruments (upright bass, keys, drums) and will need monitors. The DJ brings a controller. The auction slideshow runs from a laptop at the podium and has sound.
+
+There's a stage on the north wall with the podium on the left, round tables for 300 and the dance floor in front of the stage. Power is available at the stage.
+
+We'll want a sound tech there all night. Our budget is around $6,500. Crew meals are provided at 5 PM, and the venue needs your certificate of insurance two weeks before.
+
+Venue contact: Marcus (venue events), (312) 555-0102.
+
+Thanks!
+Priya Raman
+Events Coordinator, Lakeview Youth Arts Fund
+(773) 555-0148
+"""
+    msg = EmailMessage()
+    msg["From"] = "Priya Raman <priya.raman@example.org>"
+    msg["To"] = "office@example.com"
+    msg["Subject"] = "Spring Gala: venue, timeline and gear"
+    msg.set_content(body)
+    answers = {
+        "name": "Priya Raman", "organization": "Lakeview Youth Arts Fund", "email": "priya.raman@example.org",
+        "phone": "(773) 555-0148",
+        "description": "Spring fundraising gala: dinner with a jazz trio, a program with four speakers and a live "
+                       "auction, then a DJ for dancing.",
+        "event_type": "Fundraiser / Gala", "event_name": "Lakeview Youth Arts Spring Gala", "event_date": day(45),
+        "attendance": 300, "setting": "Indoors",
+        "performers": "Four speakers and an auctioneer; the Northside Jazz Trio; a DJ",
+        "venue_name": "Harborview Ballroom",
+        "layout": "Stage on the north wall with the podium on the left, round tables for 300, dance floor in front "
+                  "of the stage.",
+        "stage": "Yes", "power": "Yes", "venue_contact": "Marcus (venue events), (312) 555-0102",
+        "access": ["Loading dock", "Elevator"], "load_in_time": "13:00", "load_out_time": "23:30",
+        "load_in_notes": "The dock is on the side street; the freight elevator goes straight to the ballroom level.",
+        "parking": "Two vehicles at the dock until 5 PM, then the attached garage (validated).",
+        "doors_time": "18:00", "end_time": "23:00",
+        "schedule": "6:00 PM Doors and cocktails\n7:00 PM Dinner (jazz trio)\n7:45 PM Program: 4 speakers\n"
+                    "8:15 PM Live auction\n9:30 PM DJ and dancing until 11",
+        "needs": [intake.SPEAKERS, intake.SPEECH_MICS, intake.WIRELESS, intake.BAND, intake.DJ, intake.PLAYBACK,
+                  intake.MONITORS],
+        "tech": intake.TECH_ON_SITE, "mic_count": 5,
+        "gear_details": "Podium mic plus 4 handheld wireless (speakers and auctioneer)\nMonitors for the jazz trio "
+                        "(upright bass, keys, drums; they bring their instruments)\nDJ brings a controller\n"
+                        "Laptop audio at the podium for the auction slideshow",
+        "budget": "Around $6,500",
+    }
+    quotes = {
+        "name": "Priya Raman, Events Coordinator", "organization": "Events Coordinator, Lakeview Youth Arts Fund",
+        "email": "From: Priya Raman <priya.raman@example.org>", "event_date": f"Spring Gala on {when}",
+        "attendance": "expect about 300 guests", "venue_name": "We're at the Harborview Ballroom this year",
+        "stage": "There's a stage on the north wall", "power": "Power is available at the stage.",
+        "load_in_time": "the venue lets us in from 1 PM", "load_out_time": "Everything has to be out by 11:30 PM.",
+        "parking": "two vehicles at the dock until 5 PM, then the attached garage", "doors_time": "6:00 PM Doors",
+        "end_time": "DJ and dancing until 11", "tech": "We'll want a sound tech there all night.",
+        "mic_count": "a podium mic plus 4 handheld wireless", "budget": "Our budget is around $6,500.",
+        "venue_contact": "Venue contact: Marcus (venue events), (312) 555-0102.",
+    }
+    created = (datetime.now() - timedelta(minutes=50)).isoformat(timespec="seconds")
+    request_id = db.insert("client_requests", {
+        "name": answers["name"], "organization": answers["organization"], "email": answers["email"],
+        "phone": answers["phone"], "event_date": answers["event_date"], "event_type": answers["event_type"],
+        "answers": json.dumps(answers), "source": "import", "suggested_event_id": gala, "created_at": created,
+        "ai_details": json.dumps({
+            "model": "claude-opus-5-5", "cost": 0.05, "by": "office", "files": ["Spring Gala details.eml"],
+            "summary": "Email from the gala's events coordinator with the venue, timeline and gear needs.",
+            "quotes": quotes, "match_reason": "Same organization and date as the gala inquiry.",
+            "other": ["Crew meals provided at 5 PM", "The venue needs a certificate of insurance two weeks before",
+                      "Auction slideshow plays from a laptop at the podium, with sound"],
+        }),
+    })
+    original, stored, size = files.store_upload("Spring Gala details.eml", msg.as_bytes())
+    db.insert("client_request_files", {"request_id": request_id, "original_name": original, "stored_name": stored,
+                                       "size": size})
+    db.insert("ai_usage", {"created_at": created, "model": "claude-opus-5-5", "input_tokens": 4100,
+                           "output_tokens": 1650, "cost": 0.05, "outcome": "ok", "request_id": request_id})

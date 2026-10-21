@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf %}
+{% block title %}Import with AI{% endblock %}
+{% block heading %}<h1>Import with AI</h1><div class="sub">Upload a rider, tech pack, stage plot, input list, schedule or email. The AI fills in an event request for you to check.</div>{% endblock %}
+{% block content %}
+<div class="split">
+  <section class="card">
+    {% if demo %}
+      <div class="flash flash-warn">Importing is turned off in the demo because it uses a paid AI service. {% if demo_example %}<a href="{{ url_for('requests.detail', request_id=demo_example) }}">See an example of what it finds</a>.{% endif %}</div>
+    {% elif not ready %}
+      <div class="flash flash-warn">AI import isn't set up yet: the server needs an Anthropic API key. <a href="{{ url_for('imports.settings') }}">Settings → AI import</a> shows how.</div>
+    {% endif %}
+    {% if error %}<div class="flash flash-bad">{{ error }}</div>{% endif %}
+    <form method="post" enctype="multipart/form-data" data-ai-import>
+      {{ csrf() }}
+      <div class="field">
+        <label for="ai-files">Files</label>
+        <input id="ai-files" type="file" name="files" multiple accept="{{ accept }}" data-max-bytes="{{ max_bytes }}" data-max-files="{{ max_files }}">
+        <div class="help">PDFs, photos and screenshots (JPG, PNG), Word (.docx), Excel (.xlsx), emails saved as .eml, and text or CSV files. Up to {{ max_files }} files and {{ max_bytes // 1048576 }} MB at a time.{% if error %} <strong>Choose the files again</strong> before trying again.{% endif %}</div>
+      </div>
+      <div class="field">
+        <label for="ai-pasted">Or paste an email or notes</label>
+        <textarea id="ai-pasted" name="pasted" rows="8" placeholder="Paste the text of an email, a text message or your call notes">{{ pasted }}</textarea>
+      </div>
+      <div class="field">
+        <label for="ai-event">Which event is it about?</label>
+        <select id="ai-event" name="event">
+          <option value="">Let the AI match it, or start a new inquiry</option>
+          {% for id, label, selected in events %}<option value="{{ id }}" {% if selected %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+        <div class="help">If you know, pick it. Either way, nothing changes on an event until you've checked what the AI found.</div>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit" {% if demo or not ready %}disabled{% endif %}>Read with AI</button>
+        <span class="help">Uses {{ model_name }}: {{ typical }}.</span>
+      </div>
+      <p class="ai-busy" data-busy hidden><span class="spinner" aria-hidden="true"></span> Reading… This usually takes 10 to 60 seconds. Keep this page open.</p>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>How it works</h2>
+    <ol class="small steps">
+      <li><strong>The AI reads everything</strong> you upload and answers the same questions as your client request form: date, venue, load-in, parking, timeline, contacts, attendance, gear and so on.</li>
+      <li><strong>You check it.</strong> Each answer shows the line from the document it came from, so mistakes are easy to spot. Anything that doesn't fit a question is listed too.</li>
+      <li><strong>Add it to an event, or create an inquiry.</strong> Adding only fills in what the event is missing; anything that differs from what you already have goes into the office notes. The files go to the event's Documents tab.</li>
+    </ol>
+    <p class="help">The files are sent to Anthropic to be read. By default, Anthropic doesn’t use what’s sent through its API to train its AI. Each import costs a few cents; see <a href="{{ url_for('imports.settings') }}">Settings → AI import</a>.</p>
+  </section>
+</div>
+{% endblock %}

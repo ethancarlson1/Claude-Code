@@ -4,7 +4,7 @@ The operations platform for Chicago Sound and Backline. It keeps the schedule, t
 
 It covers the full range of sound reinforcement work: corporate programs and keynotes, live concerts and club shows, festivals, private parties, galas, weddings, theater, worship and backline dry hire.
 
-It is a small Flask + SQLite app: one Python dependency, one database file, no build step.
+It is a small Flask + SQLite app: a handful of Python packages, one database file, no build step.
 
 ## Features
 
@@ -150,6 +150,48 @@ A public page where clients tell you about their event, at **/request** on your 
 - Archive requests you won't take on; delete spam. The form can be turned off, in which case the link shows your phone and email instead.
 - Spam protection: a hidden field that only bots fill in, and a limit of 5 requests per hour from one network.
 
+## Import with AI
+
+Upload a rider, tech pack, stage plot, input list, schedule or email, and Claude (Anthropic's AI) fills in an event request from it. Open **Requests → Import with AI**, or **Read it with AI** on an event's Documents tab.
+
+**What it reads**
+- PDFs, including scans
+- Photos and screenshots (JPG, PNG, GIF, WebP). Big phone photos are scaled down first. iPhone HEIC photos need to be shared as JPG.
+- Word (.docx) and Excel (.xlsx) files
+- Emails saved as .eml, with their attachments
+- Text and CSV files, or text pasted straight into the page
+
+Up to 10 files and 20 MB at a time. Older Office formats (.doc, .xls), Pages and Numbers files need saving as PDF first.
+
+**How it works**
+1. The AI answers the same questions as the request form: client, date, venue, load-in, parking, timeline, contacts, head count, gear and so on.
+   - Each answer comes with the line from the document it was read from.
+   - Anything useful that has no question of its own (crew meals, insurance deadlines, monitor mixes…) is listed separately.
+2. It also checks your recent and upcoming events and suggests the one the documents are about. Importing from an event's page ties it to that event.
+3. The result lands in the **Requests** inbox, marked **AI import**. Nothing changes on any event until someone checks it and clicks:
+   - **Add to event** fills in only what the event is missing. Anything that differs from what's already there goes into the office notes, along with the extra details.
+   - **Create inquiry** makes a new event, the same as for a request from the form.
+4. The files, and any pasted text, move to the event's Documents tab, office-only until you share them with crew.
+
+**Setting it up**
+1. At [console.anthropic.com](https://console.anthropic.com), add some credit (Billing) and create an API key (API Keys). Copy it straight away: it's only shown once.
+2. Add it to the server as `ANTHROPIC_API_KEY`. On Render, that's your service → **Environment**. The Blueprint asks for it when you first create the service.
+3. Open **Settings → AI import** and click **Check connection**. Checking is free.
+4. Set a monthly spending limit in the Anthropic console (Limits), so a mistake can't run up a bill.
+
+**Models and cost.** Pick the model under **Settings → AI import**. The page also shows this month's spending, worked out from what Anthropic reports for each import.
+
+| Model | Short email | 5-page rider | Good for |
+| --- | --- | --- | --- |
+| Claude Opus 5.5 (default) | about 4¢ | about 13¢ | Scans, photos and messy documents |
+| Claude Sonnet 5.5 | about 2¢ | about 7¢ | Typed documents and emails |
+| Claude Haiku 5.5 | well under 1¢ | about 1¢ | Short, clear emails |
+
+These are estimates. Your Anthropic bill is the final word.
+- With Opus and Sonnet, if the model declines a document, Anthropic automatically retries it on another model (its "server-side fallback").
+- The files are sent to Anthropic to be read. By default, Anthropic doesn't use what's sent through its API to train its models.
+- AI import is off in the demo, which instead shows a sample import of an email about the gala.
+
 ## QuickBooks Online
 
 Connect your QuickBooks Online company under **Settings → QuickBooks**. Nothing is sent to QuickBooks until you do.
@@ -275,6 +317,8 @@ Render sets up the https certificate. Then link your website's "Request a quote"
 
 **6. Connect QuickBooks (optional).** In your Intuit app, add the Redirect URI shown under **Settings → QuickBooks** on the live site. Use the production keys, switch the environment to **Production**, and connect. See *QuickBooks Online* above.
 
+**7. Turn on Import with AI (optional).** Add your Anthropic API key as `ANTHROPIC_API_KEY` under the service's **Environment**, if you didn't when creating it, then click **Check connection** under **Settings → AI import**. See *Import with AI* above.
+
 **Day to day**
 - **Backups:** Render snapshots the disk daily and keeps snapshots at least a week. Also download a backup from **Settings → Backup** now and then, and keep it somewhere safe.
 - **Forgotten passwords:** anyone signed in can set a new password for another user under **Settings → Users**. If nobody can sign in, open the service's **Shell** in Render and run `flask --app backline reset-password <username>`.
@@ -286,10 +330,11 @@ Render sets up the https certificate. Then link your website's "Request a quote"
 To show people what the platform does without paying for hosting or touching real data, run it in **demo mode** on Render's free plan.
 
 **What visitors get**
-- The sample Chicago data: events of every type, crew, gear, contracts, invoices, crew pay and two client requests.
+- The sample Chicago data: events of every type, crew, gear, contracts, invoices, crew pay, two client requests and one AI import.
 - A sign-in page with one **Explore the demo** button; no account needed.
 - They can click through everything and try it: create and edit events, build gear lists, tick checklists, open crew worksheets, send the request form, and turn a request into an inquiry.
-- Changes that would lock others out or reach outside services are turned off: users and passwords, company details and logo, QuickBooks, restoring backups, and switching the request form off.
+- Changes that would lock others out or reach outside services are turned off: users and passwords, company details and logo, QuickBooks, AI import, restoring backups, and switching the request form off.
+- A sample AI import (an email about the gala) shows what the AI finds, and can be added to its event.
 - A banner on every page says it's a demo, with a **Start over** button that puts the sample data back.
 - The demo is hidden from search engines, and uploads are limited to 5 MB.
 
@@ -314,6 +359,7 @@ To show people what the platform does without paying for hosting or touching rea
 - A free service goes to sleep after about 15 minutes without visitors. The next visit takes up to a minute to wake it, so open the link a minute before a meeting.
 - Every time it wakes up or redeploys, it starts again with fresh sample data.
 - Never put real bookings in the demo. Use the paid live site for those.
+- Don't add `ANTHROPIC_API_KEY` to the demo service. AI import stays off there anyway.
 
 ## Running it elsewhere
 
@@ -338,6 +384,7 @@ BACKLINE_SECRET_KEY=... BACKLINE_DATABASE=/srv/backline/backline.sqlite3 BACKLIN
 | `BACKLINE_MAX_UPLOAD_MB` | Largest upload accepted at once, in MB. Default: 50. |
 | `BACKLINE_MAX_RESTORE_MB` | Largest backup that can be restored, in MB. Default: 500. |
 | `BACKLINE_QBO_CLIENT_ID`, `BACKLINE_QBO_CLIENT_SECRET` | Optional. Your Intuit app's keys, instead of entering them under Settings → QuickBooks. |
+| `ANTHROPIC_API_KEY` | Optional. Turns on Import with AI (see *Import with AI*). |
 
 **Backups:** **Settings → Backup → Download backup** saves the database and every uploaded file in one .zip. The database also holds the QuickBooks sign-in when connected, so keep backups private.
 
@@ -387,12 +434,13 @@ backline/
   files.py           event document storage (uploads folder, allowed types, downloads)
   quickbooks.py      QuickBooks Online: sign-in, sending invoices and payments, bringing payments back
   intake.py          the event request form: questions, reading answers, turning a request into an event
+  ai_import.py       Import with AI: reading files, asking Claude, checking its answers, cost
   backup.py          backup downloads and restoring onto an empty platform
   demo.py            demo mode for the free showcase site
   seed.py            Chicago demo data
   views/             dashboard, events (crew/gear/checklists/chat/calendar), inventory,
                      people (clients/venues/crew), contracts, invoices, crewpay, settings, quickbooks,
-                     requests (the office inbox), intake (the public request form), backups,
+                     requests (the office inbox), imports (Import with AI), intake (the public request form), backups,
                      public (crew worksheets, contract signing, client invoices)
   templates/, static/ (static/brand/ holds the logo and icons)
 render.yaml          Render Blueprint for the live site
@@ -405,4 +453,4 @@ tests/
 - Online payments go through QuickBooks Payments when QuickBooks is connected. Paying crew through Zelle, Venmo or similar is on hold.
 - The e-signature is a typed name plus an agreement checkbox, with a time and IP audit record. Check that this meets Illinois requirements. The default contract and crew policy text is a starting point, not legal advice.
 - Possible additions: a per-crew iCal feed of all their calls, gear "kits", and barcode scanning for check-in and check-out.
-- Planned: an AI import page that reads emails, input lists, schedules and tech packs and proposes changes for you to approve.
+- AI import fills in event details. Next steps could be turning a rider's gear list into gear-list lines from your inventory, and forwarding emails to an import address instead of saving them as .eml.

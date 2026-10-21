@@ -521,6 +521,7 @@
 {% if tab == 'documents' %}
 <section class="card" id="files">
   <div class="card-head"><h2>Event documents</h2><span class="muted small">Stage plots, input lists, riders, tech packs, maps: anything you'll want to find later.</span></div>
+  <p class="small">Got a rider, tech pack or email with details for this event? <a class="btn btn-small" href="{{ url_for('imports.new', event=event.id) }}">Read it with AI</a> <span class="muted">It fills in what the event is missing, after you've checked it.</span></p>
   {% if files %}
   <div class="table-wrap">
   <table>

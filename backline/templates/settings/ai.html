@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf %}
+{% block title %}AI import{% endblock %}
+{% block heading %}<h1>Settings</h1>{% endblock %}
+{% block content %}
+{% include "settings/_tabs.html" %}
+<div class="stack" style="max-width:820px">
+  <section class="card">
+    <h2>AI import</h2>
+    <p>Upload a rider, tech pack, stage plot, input list, schedule or email, and Claude (Anthropic's AI) fills in an event request from it. You check what it found, then add it to an event or create an inquiry. <a href="{{ url_for('imports.new') }}">Import a document</a></p>
+    {% if key_hint %}
+      <p><span class="badge badge-ok">Set up</span> The server has an Anthropic API key (ending in {{ key_hint }}).</p>
+      <form method="post" class="inline">{{ csrf() }}<input type="hidden" name="action" value="check"><button class="btn" type="submit">Check connection</button></form>
+      <p class="help">Checking is free: it asks Anthropic whether the key works, without reading anything.</p>
+    {% else %}
+      <p><span class="badge badge-muted">Not set up</span> The server doesn't have an Anthropic API key yet.</p>
+      <ol class="small">
+        <li>At <strong>console.anthropic.com</strong>, add some credit (Billing), then create a key (API Keys). Copy it straight away: it's only shown once.</li>
+        <li>On Render, open your service → <strong>Environment</strong> and add <code>ANTHROPIC_API_KEY</code> with the key as its value. (Running it on your own computer? Set it before starting the app.)</li>
+        <li>Save. The app restarts and this page shows the key as set up.</li>
+      </ol>
+    {% endif %}
+    <p class="help">Set a monthly spending limit at console.anthropic.com (Limits) so a mistake can't run up a bill. Keep the key out of the code, GitHub and the demo site.</p>
+  </section>
+
+  <section class="card">
+    <h2>Which AI model</h2>
+    <form method="post">
+      {{ csrf() }}
+      <div class="choice-list">
+      {% for id, m in models.items() %}
+        <label class="check"><input type="radio" name="model" value="{{ id }}" {% if id == current %}checked{% endif %}>
+          <span><strong>{{ m[0] }}</strong> <span class="small muted">· {{ m[4] }}</span><br><span class="small">{{ m[1] }}</span></span></label>
+      {% endfor %}
+      </div>
+      <div class="form-actions"><button class="btn btn-primary" type="submit">Save</button></div>
+    </form>
+    <p class="help">Not sure? Import a few of your real documents with Haiku and with Opus and compare what they find. If Haiku gets it right, it costs almost nothing.</p>
+  </section>
+
+  <section class="card">
+    <h2>Spending</h2>
+    {% macro spent(s) %}{% if s.count %}{{ s.count }} import{{ 's' if s.count != 1 }} · {{ 'about ' if s.cost >= 0.01 }}{{ cost_text(s.cost) }}{% else %}None{% endif %}{% endmacro %}
+    <dl class="facts">
+      <dt>This month</dt><dd>{{ spent(spending.this_month) }}</dd>
+      <dt>Last month</dt><dd>{{ spent(spending.last_month) }}</dd>
+      <dt>All time</dt><dd>{{ spent(spending.all_time) }}</dd>
+    </dl>
+    <p class="help">Worked out from what Anthropic reports for each import. Your Anthropic bill (console.anthropic.com) is the final word.</p>
+  </section>
+</div>
+{% endblock %}

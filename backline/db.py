@@ -59,6 +59,11 @@ MIGRATIONS = {
     "payments": [("qbo_payment_id", "TEXT"), ("qbo_imported", "INTEGER NOT NULL DEFAULT 0")],
     "checklist_templates": [("crew_visible", "INTEGER NOT NULL DEFAULT 1")],
     "event_checklist_items": [("crew_visible", "INTEGER NOT NULL DEFAULT 1")],
+    "client_requests": [
+        ("source", "TEXT NOT NULL DEFAULT 'form'"),
+        ("suggested_event_id", "INTEGER REFERENCES events(id) ON DELETE SET NULL"),
+        ("ai_details", "TEXT"),
+    ],
 }
 
 def get_db():

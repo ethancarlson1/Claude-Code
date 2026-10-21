@@ -292,7 +292,8 @@ def test_demo_requests(client, app):
     with app.app_context():
         seed()
         rows = dbm.query("SELECT * FROM client_requests ORDER BY id")
-    assert [r["name"] for r in rows] == ["Grace Okafor", "Dev Patel"]
+    assert [(r["name"], r["source"]) for r in rows] == [("Grace Okafor", "form"), ("Dev Patel", "form"),
+                                                        ("Priya Raman", "import")]
     for r in rows:
         assert client.get(f"/requests/{r['id']}").status_code == 200
         assert client.get(f"/requests/{r['id']}/convert").status_code == 200

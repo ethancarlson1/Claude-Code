@@ -14,7 +14,8 @@ from . import db, util
 
 ALLOWED_EXTENSIONS = {
     # documents
-    "pdf", "doc", "docx", "xls", "xlsx", "csv", "txt", "rtf", "ppt", "pptx", "pages", "numbers", "key",
+    "pdf", "doc", "docx", "xls", "xlsx", "csv", "tsv", "txt", "md", "rtf", "ppt", "pptx", "pages", "numbers", "key",
+    "eml",  # emails saved from a mail app
     # images
     "png", "jpg", "jpeg", "gif", "webp", "heic",
     # stage plot / CAD files

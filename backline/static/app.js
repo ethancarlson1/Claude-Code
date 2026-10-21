@@ -271,4 +271,32 @@
       if (message) fileInput.reportValidity();
     });
   }
+
+  // Import with AI: check sizes before sending, then show that it's working (it can take a minute).
+  var aiForm = document.querySelector("form[data-ai-import]");
+  if (aiForm) {
+    var aiFiles = aiForm.querySelector("input[type=file]");
+    var aiText = aiForm.querySelector("textarea");
+    var aiCheck = function () {
+      var max = parseInt(aiFiles.getAttribute("data-max-bytes"), 10);
+      var maxFiles = parseInt(aiFiles.getAttribute("data-max-files"), 10);
+      var total = 0;
+      Array.prototype.forEach.call(aiFiles.files, function (f) { total += f.size; });
+      var message = "";
+      if (aiFiles.files.length > maxFiles) message = "Import up to " + maxFiles + " files at a time.";
+      else if (total > max) message = "These files add up to more than " + Math.floor(max / 1048576) + " MB. Import fewer at a time.";
+      else if (!aiFiles.files.length && !aiText.value.trim()) message = "Choose a file, or paste some text.";
+      aiFiles.setCustomValidity(message);
+      return message;
+    };
+    aiFiles.addEventListener("change", function () { if (aiCheck()) aiFiles.reportValidity(); });
+    aiText.addEventListener("input", aiCheck);
+    aiForm.addEventListener("submit", function (e) {
+      if (aiCheck()) { e.preventDefault(); aiFiles.reportValidity(); return; }
+      var button = aiForm.querySelector("button[type=submit]");
+      // After the browser has started sending, so the click still counts.
+      setTimeout(function () { button.disabled = true; button.textContent = "Reading…"; }, 0);
+      aiForm.querySelector("[data-busy]").hidden = false;
+    });
+  }
 })();
