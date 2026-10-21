@@ -1,22 +1,63 @@
 {% extends "base.html" %}
 {% from "_macros.html" import csrf, badge, delete_button %}
-{% block title %}Request from {{ req.name }}{% endblock %}
-{% block heading %}<h1>Request #{{ req.id }} {{ badge(req.status) }}</h1>
-  <div class="sub">{{ req.name }}{% if req.organization %} · {{ req.organization }}{% endif %} · received {{ req.created_at|fdatetime }}</div>{% endblock %}
+{% macro quote(label) %}{% if quotes.get(label) %}<span class="ai-quote">“{{ quotes[label] }}”</span>{% endif %}{% endmacro %}
+{% block title %}{{ 'Imported documents' if ai else 'Request from ' ~ req.name }}{% endblock %}
+{% block heading %}
+  {% if ai %}
+  <h1>Imported documents #{{ req.id }} {{ badge(req.status) }}</h1>
+  <div class="sub">Read by AI · imported {{ req.created_at|fdatetime }}{% if ai.by %} by {{ ai.by }}{% endif %}</div>
+  {% else %}
+  <h1>Request #{{ req.id }} {{ badge(req.status) }}</h1>
+  <div class="sub">{{ req.name }}{% if req.organization %} · {{ req.organization }}{% endif %} · received {{ req.created_at|fdatetime }}</div>
+  {% endif %}
+{% endblock %}
 {% block content %}
 <div class="split">
   <div class="stack">
+    {% if ai %}
+    <section class="card ai-card">
+      <h2>What the AI found</h2>
+      {% if ai.summary %}<p>{{ ai.summary }}</p>{% endif %}
+      <p class="help">{{ model_name }} read {{ ai.files|join(', ') if ai.files else 'the documents' }} and filled in what it found (cost {{ cost }}). AI can misread things, so check each answer against the quote under it before you use it.</p>
+      {% if not summary and not answers.name and not answers.organization %}<p class="small"><strong>It didn't find any event details.</strong> Open the files below to see what they say.</p>{% endif %}
+    </section>
+    {% endif %}
     {% for title, rows in summary %}
     <section class="card">
       <h2>{{ title }}</h2>
       <dl class="facts">
-        {% for label, text in rows %}<dt>{{ label }}</dt><dd class="pre">{{ text }}</dd>{% endfor %}
+        {% for label, text in rows %}<dt>{{ label }}</dt><dd><span class="pre">{{ text }}</span>{{ quote(label) }}</dd>{% endfor %}
       </dl>
     </section>
     {% endfor %}
+    {% if ai and ai.other %}
+    <section class="card">
+      <h2>Also in the documents</h2>
+      <ul class="small">{% for line in ai.other %}<li>{{ line }}</li>{% endfor %}</ul>
+      <p class="help">These go into the event's office notes.</p>
+    </section>
+    {% endif %}
+    {% if gear %}
+    <section class="card">
+      <h2>Gear from the documents</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Asked for</th><th class="num">Qty</th><th>Our item</th>{% if gear_dates %}<th class="num">Free</th>{% endif %}</tr></thead>
+        <tbody>
+        {% for g in gear %}
+          <tr>
+            <td>{{ g.requested }}{% if g.quote %}<span class="ai-quote">“{{ g.quote }}”</span>{% endif %}</td>
+            <td class="num">{{ g.quantity }}</td>
+            <td>{% if g.item_name %}{{ g.item_name }}{% if g.match == 'substitute' %} <span class="badge badge-warn">substitute</span>{% endif %}{% else %}<span class="badge badge-muted">not in inventory</span>{% endif %}</td>
+            {% if gear_dates %}<td class="num">{% if g.item_name %}<span class="{{ 'error' if g.free < g.quantity }}">{{ g.free }}</span>{% else %}—{% endif %}</td>{% endif %}
+          </tr>
+        {% endfor %}
+        </tbody></table></div>
+      <p class="help">{% if gear_dates %}Free: units not booked on other events {% if gear_dates[0] == gear_dates[1] %}on {{ gear_dates[0]|fdate }}{% else %}from {{ gear_dates[0]|fdate('short') }} to {{ gear_dates[1]|fdate('short') }}{% endif %}. {% endif %}Once this is part of an event, you pick what goes on its gear list on the Audio &amp; backline tab.</p>
+    </section>
+    {% endif %}
     {% if files %}
     <section class="card">
-      <h2>Attached files</h2>
+      <h2>{{ 'Documents' if ai else 'Attached files' }}</h2>
       <table><tbody>
         {% for f in files %}<tr><td><a href="{{ url_for('requests.download_file', request_id=req.id, file_id=f.id) }}">{{ f.original_name }}</a></td><td class="num small muted">{{ f.size|filesize }}</td></tr>{% endfor %}
       </tbody></table>
@@ -29,39 +70,51 @@
     <section class="card">
       <h2>Next step</h2>
       {% if req.status == 'converted' and event %}
-        <p>This request is part of <a href="{{ url_for('events.detail', event_id=event.id) }}"><strong>{{ event.title }}</strong></a>.</p>
+        <p>This {{ 'import' if ai else 'request' }} is part of <a href="{{ url_for('events.detail', event_id=event.id) }}"><strong>{{ event.title }}</strong></a>.</p>
       {% elif req.status == 'converted' %}
-        <p class="muted">The event this request became has since been deleted.</p>
+        <p class="muted">The event this {{ 'import' if ai else 'request' }} became has since been deleted.</p>
       {% else %}
+        {% if suggested %}
+        <p>The AI thinks this is about <a href="{{ url_for('events.detail', event_id=suggested.id) }}"><strong>{{ suggested.title }}</strong></a> on {{ suggested.event_date|fdate }}.{% if ai.match_reason %} <span class="small muted">{{ ai.match_reason }}</span>{% endif %}</p>
+        {% else %}
         <p><a class="btn btn-primary" href="{{ url_for('requests.convert', request_id=req.id) }}">Create inquiry</a></p>
-        <p class="help">Makes a new event with this client, venue and everything they told you, ready for a gear list and quote.</p>
+        <p class="help">Makes a new event with this client, venue and everything {{ 'the documents say' if ai else 'they told you' }}, ready for a gear list and quote.</p>
+        {% endif %}
         {% if events %}
         <form method="post" action="{{ url_for('requests.add_to_event', request_id=req.id) }}" style="margin-top:1rem">
           {{ csrf() }}
           <div class="field">
-            <label for="event_id">Or add it to an existing event</label>
+            <label for="event_id">{{ 'Add it to this event' if suggested else 'Or add it to an existing event' }}</label>
             <select id="event_id" name="event_id" required>
               <option value="">Choose an event…</option>
-              {% for id, label, near in events %}<option value="{{ id }}" {% if near %}selected{% endif %}>{{ label }}</option>{% endfor %}
+              {% for id, label, selected in events %}<option value="{{ id }}" {% if selected %}selected{% endif %}>{{ label }}</option>{% endfor %}
             </select>
             <div class="help">Fills in anything the event is missing. Answers that differ from what's already there go into the office notes.</div>
           </div>
-          <div class="form-actions"><button class="btn" type="submit">Add to event</button></div>
+          <div class="form-actions"><button class="btn{{ ' btn-primary' if suggested }}" type="submit">Add to event</button></div>
         </form>
+        {% endif %}
+        {% if suggested %}
+        <p style="margin-top:1rem"><a class="btn" href="{{ url_for('requests.convert', request_id=req.id) }}">Create a new inquiry instead</a></p>
         {% endif %}
       {% endif %}
     </section>
 
     <section class="card">
       <h2>Contact</h2>
+      {% if answers.name or answers.organization or answers.email or answers.phone %}
       <dl class="facts">
-        <dt>Name</dt><dd>{{ req.name }}</dd>
-        {% if req.organization %}<dt>Organization</dt><dd>{{ req.organization }}</dd>{% endif %}
-        {% if req.email %}<dt>Email</dt><dd><a href="mailto:{{ req.email }}">{{ req.email }}</a></dd>{% endif %}
-        {% if req.phone %}<dt>Phone</dt><dd><a href="tel:{{ req.phone }}">{{ req.phone }}</a></dd>{% endif %}
+        {% if answers.name %}<dt>Name</dt><dd>{{ answers.name }}{{ quote('Your name') }}</dd>{% endif %}
+        {% if answers.organization %}<dt>Organization</dt><dd>{{ answers.organization }}{{ quote('Company or organization') }}</dd>{% endif %}
+        {% if answers.email %}<dt>Email</dt><dd><a href="mailto:{{ answers.email }}">{{ answers.email }}</a>{{ quote('Email') }}</dd>{% endif %}
+        {% if answers.phone %}<dt>Phone</dt><dd><a href="tel:{{ answers.phone }}">{{ answers.phone }}</a>{{ quote('Phone') }}</dd>{% endif %}
       </dl>
-      {% if req.email %}
-      <p style="margin-top:.8rem"><a class="btn btn-small" href="{{ mailto(req.email, 'Your event request', 'Hi ' ~ req.name.split()[0] ~ ',\n\nThanks for telling us about your event' ~ (' on ' ~ (req.event_date|fdate('short')) if req.event_date else '') ~ '.\n\n\n' ~ settings.company_name) }}">Reply by email</a></p>
+      {% else %}
+      <p class="muted small">The documents didn't say who the client is. Pick one when you create the inquiry, or add the details to the event.</p>
+      {% endif %}
+      {% if answers.email %}
+      {% set greeting = 'Hi ' ~ answers.name.split()[0] if answers.name else 'Hi' %}
+      <p style="margin-top:.8rem"><a class="btn btn-small" href="{{ mailto(answers.email, 'Your event request', greeting ~ ',\n\nThanks for telling us about your event' ~ (' on ' ~ (req.event_date|fdate('short')) if req.event_date else '') ~ '.\n\n\n' ~ settings.company_name) }}">Reply by email</a></p>
       {% endif %}
     </section>
 
@@ -72,8 +125,8 @@
       {% else %}
         <form method="post" action="{{ url_for('requests.set_status', request_id=req.id) }}" class="inline">{{ csrf() }}<input type="hidden" name="action" value="reopen"><button class="btn" type="submit">Move back to New</button></form>
       {% endif %}
-      {{ delete_button(url_for('requests.delete', request_id=req.id), 'this request and its files') }}
-      <p class="help" style="margin-top:.5rem">Archive requests you won't take on. Delete spam.</p>
+      {{ delete_button(url_for('requests.delete', request_id=req.id), 'this ' ~ ('import' if ai else 'request') ~ ' and its files') }}
+      <p class="help" style="margin-top:.5rem">{{ 'Archive imports you don’t need. Delete ones the AI got wrong, and try again.' if ai else 'Archive requests you won’t take on. Delete spam.' }}</p>
     </section>
     {% endif %}
   </div>

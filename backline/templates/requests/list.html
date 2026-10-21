@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% from "_macros.html" import csrf, copy_link, empty, badge %}
 {% block title %}Requests{% endblock %}
-{% block heading %}<h1>Event requests</h1><div class="sub">Sent in by clients through your request form</div>{% endblock %}
-{% block actions %}<a class="btn" href="{{ url_for('intake.form') }}" target="_blank" rel="noopener">Open the form</a>{% endblock %}
+{% block heading %}<h1>Event requests</h1><div class="sub">Sent in by clients through your request form, or read from documents by AI</div>{% endblock %}
+{% block actions %}<a class="btn btn-primary" href="{{ url_for('imports.new') }}">Import with AI</a><a class="btn" href="{{ url_for('intake.form') }}" target="_blank" rel="noopener">Open the form</a>{% endblock %}
 {% block content %}
 <section class="card">
   <div class="card-head">
@@ -29,11 +29,11 @@
   <div class="table-wrap"><table>
     <thead><tr><th>Received</th><th>From</th><th>Event</th><th>Date</th><th class="num">People</th><th>Where</th>{% if status != 'new' %}<th>Status</th>{% endif %}</tr></thead>
     <tbody>
-    {% for r, a in rows %}
+    {% for r, a, ai in rows %}
       <tr>
         <td class="nowrap">{{ r.created_at|fdatetime }}</td>
-        <td><a href="{{ url_for('requests.detail', request_id=r.id) }}"><strong>{{ r.name }}</strong></a>{% if r.organization %}<div class="small muted">{{ r.organization }}</div>{% endif %}</td>
-        <td>{{ a.event_name or a.event_type or '—' }}{% if a.description %}<div class="small muted">{{ a.description|truncate(90) }}</div>{% endif %}{% if r.file_count %}<div class="small muted">{{ r.file_count }} file{{ 's' if r.file_count != 1 }} attached</div>{% endif %}</td>
+        <td><a href="{{ url_for('requests.detail', request_id=r.id) }}"><strong>{{ r.name }}</strong></a>{% if r.source == 'import' %} <span class="badge badge-info">AI import</span>{% endif %}{% if r.organization and r.organization != r.name %}<div class="small muted">{{ r.organization }}</div>{% endif %}</td>
+        <td>{{ a.event_name or a.event_type or '—' }}{% if a.description %}<div class="small muted">{{ a.description|truncate(90) }}</div>{% elif ai.summary %}<div class="small muted">{{ ai.summary|truncate(90) }}</div>{% endif %}{% if r.file_count %}<div class="small muted">{{ r.file_count }} file{{ 's' if r.file_count != 1 }} attached</div>{% endif %}</td>
         <td class="nowrap">{{ r.event_date|fdate('short') if r.event_date else '—' }}</td>
         <td class="num">{{ a.attendance or '—' }}</td>
         <td>{{ a.venue_name or '—' }}</td>

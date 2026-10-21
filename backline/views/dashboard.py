@@ -25,7 +25,10 @@ def index():
           (SELECT COALESCE(SUM(pulled), 0) FROM event_gear WHERE event_id = e.id) AS gear_pulled,
           (SELECT COUNT(*) FROM event_crew WHERE event_id = e.id) AS crew_total,
           (SELECT COALESCE(SUM(confirmed), 0) FROM event_crew WHERE event_id = e.id) AS crew_confirmed,
-          (SELECT COUNT(*) FROM event_vehicles WHERE event_id = e.id) AS vehicle_total
+          (SELECT COUNT(*) FROM event_vehicles WHERE event_id = e.id) AS vehicle_total,
+          (SELECT COALESCE(SUM(p.needed - (SELECT COUNT(*) FROM crew_offers o WHERE o.opening_id = p.id
+                    AND o.status = 'accepted' AND o.assignment_id IS NOT NULL)), 0)
+             FROM crew_openings p WHERE p.event_id = e.id AND p.status = 'open') AS spots_open
         FROM events e
         LEFT JOIN clients c ON c.id = e.client_id
         LEFT JOIN venues v ON v.id = e.venue_id
@@ -52,6 +55,9 @@ def index():
             attention.append((link, "crew", f"No crew assigned to {e['title']}", start))
         elif e["crew_confirmed"] < e["crew_total"]:
             attention.append((link, "crew", f"{e['crew_total'] - e['crew_confirmed']} crew unconfirmed for {e['title']}", start))
+        if e["spots_open"] > 0:
+            spots = f"{e['spots_open']} crew spot{'s' if e['spots_open'] != 1 else ''}"
+            attention.append((link, "crew", f"{spots} still open for {e['title']}", start))
         if e["gear_total"] == 0:
             attention.append((link, "gear", f"No gear list for {e['title']}", start))
         elif e["vehicle_total"] == 0:

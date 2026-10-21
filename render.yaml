@@ -33,3 +33,8 @@ services:
       # service's Environment tab.
       - key: BACKLINE_SETUP_CODE
         generateValue: true
+      # Optional: turns on Import with AI. Render asks for the value when the
+      # Blueprint is first created; leave it empty to skip. It's a secret, so it
+      # never goes in this file.
+      - key: ANTHROPIC_API_KEY
+        sync: false

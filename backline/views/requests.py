@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 
 from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
 
-from .. import db, files, intake, util
+from .. import ai_import, db, files, intake, services, util
 from .events import client_choices, event_type_choices, venue_choices
 
 bp = Blueprint("requests", __name__)
@@ -34,8 +34,9 @@ def index():
         () if status == "all" else (status,),
     )
     counts = {r["status"]: r["n"] for r in db.query("SELECT status, COUNT(*) AS n FROM client_requests GROUP BY status")}
-    return render_template("requests/list.html", rows=[(r, intake.answers_of(r)) for r in rows], status=status,
-                           statuses=STATUSES, counts=counts, enabled=db.get_setting("request_form_enabled") == "1")
+    return render_template("requests/list.html", rows=[(r, intake.answers_of(r), ai_import.details(r)) for r in rows],
+                           status=status, statuses=STATUSES, counts=counts,
+                           enabled=db.get_setting("request_form_enabled") == "1")
 
 
 @bp.route("/requests/form", methods=["POST"])
@@ -47,17 +48,19 @@ def toggle_form():
     return redirect(url_for("requests.index"))
 
 
-def _event_options(near_date=None):
-    """Events a request could belong to: recent and upcoming, nearest the requested date first."""
+def _event_options(near_date=None, chosen=None):
+    """Events a request could belong to: recent and upcoming (plus the one the AI
+    matched), with the matched one, or else one on the requested date, selected."""
     since = (util.today() - timedelta(days=60)).isoformat()
     rows = db.query(
         """SELECT e.id, e.title, e.event_date, c.name AS client_name FROM events e
            LEFT JOIN clients c ON c.id = e.client_id
-           WHERE e.status != 'cancelled' AND COALESCE(e.end_date, e.event_date) >= ? ORDER BY e.event_date""",
-        (since,),
+           WHERE (e.status != 'cancelled' AND COALESCE(e.end_date, e.event_date) >= ?) OR e.id IS ?
+           ORDER BY e.event_date""",
+        (since, chosen),
     )
-    return [(r["id"], f"{util.fdate(r['event_date'], 'short')} — {r['title']}", r["event_date"] == near_date)
-            for r in rows]
+    return [(r["id"], f"{util.fdate(r['event_date'], 'short')} — {r['title']}",
+             r["id"] == chosen if chosen else r["event_date"] == near_date) for r in rows]
 
 
 @bp.route("/requests/<int:request_id>")
@@ -65,11 +68,42 @@ def detail(request_id):
     req = get_request(request_id)
     answers = intake.answers_of(req)
     event = db.query("SELECT id, title FROM events WHERE id = ?", (req["event_id"],), one=True) if req["event_id"] else None
+    suggested = None
+    if req["suggested_event_id"]:
+        suggested = db.query("SELECT id, title, event_date FROM events WHERE id = ?", (req["suggested_event_id"],),
+                             one=True)
+    ai = ai_import.details(req)
     return render_template(
         "requests/detail.html", req=req, answers=answers, summary=intake.summary(answers, skip=("about",)), event=event,
+        **_gear_preview(ai.get("gear") or [], answers, suggested),
         files=db.query("SELECT * FROM client_request_files WHERE request_id = ? ORDER BY id", (request_id,)),
-        events=_event_options(answers.get("event_date")), settings=db.get_settings(),
+        events=_event_options(answers.get("event_date"), suggested["id"] if suggested else None),
+        settings=db.get_settings(), ai=ai, quotes=_quotes_by_label(ai.get("quotes") or {}), suggested=suggested,
+        model_name=ai_import.model_name(ai.get("model", "")), cost=ai_import.cost_text(ai.get("cost")),
     )
+
+
+def _gear_preview(gear, answers, suggested):
+    """The documents' gear list with our matching items and how many are free
+    on the event's dates (the matched event's, or the dates they gave)."""
+    if not gear:
+        return {"gear": [], "gear_dates": None}
+    items = {i["id"]: i for i in db.query("SELECT id, name FROM inventory_items")}
+    window = None
+    if suggested:
+        event = db.query("SELECT * FROM events WHERE id = ?", (suggested["id"],), one=True)
+        window = (event["event_date"], util.event_end(event))
+    elif answers.get("event_date"):
+        window = (answers["event_date"], answers.get("end_date") or answers["event_date"])
+    free = services.free_quantities(*window, exclude_event_id=suggested["id"] if suggested else None) if window else {}
+    rows = [dict(g, item_name=items[g["item_id"]]["name"] if g.get("item_id") in items else None,
+                 free=free.get(g.get("item_id")) if window else None) for g in gear]
+    return {"gear": rows, "gear_dates": window}
+
+
+def _quotes_by_label(quotes):
+    """The AI's quotes keyed by question label, as the summary shows them."""
+    return {intake.QUESTIONS[k].label: v for k, v in quotes.items() if k in intake.QUESTIONS}
 
 
 @bp.route("/requests/<int:request_id>/convert", methods=["GET", "POST"])
@@ -87,7 +121,7 @@ def convert(request_id):
         "event_type": a.get("event_type") if a.get("event_type") in types else "",
         "event_date": a.get("event_date") or "",
         "end_date": a.get("end_date") or "",
-        "client": str(client_match) if client_match else "new",
+        "client": str(client_match) if client_match else ("new" if intake.has_contact(a) else ""),
         "venue": str(venue_match) if venue_match else ("new" if a.get("venue_name") else ""),
     }
     errors = {}
@@ -110,7 +144,7 @@ def convert(request_id):
         if values["event_type"] not in [""] + types:
             errors["event_type"] = "Choose an event type."
         clients = {str(c) for c, _label in client_choices()}
-        if values["client"] not in clients | {"new", ""}:
+        if values["client"] not in clients | {"new", ""} or (values["client"] == "new" and not intake.has_contact(a)):
             errors["client"] = "Choose a client."
         venues = {str(v) for v, _label in venue_choices()}
         if values["venue"] not in venues | {"new", ""} or (values["venue"] == "new" and not a.get("venue_name")):
@@ -118,6 +152,11 @@ def convert(request_id):
         if not errors:
             event_id = intake.create_event(req, values["title"], values["event_date"], values["end_date"] or None,
                                            values["event_type"], values["client"], values["venue"])
+            gear = len(intake.ai_details(req).get("gear") or [])
+            if gear:
+                flash(f"Inquiry created from request #{request_id}. Check the {gear} gear item"
+                      f"{'s' if gear != 1 else ''} from the documents below, then add them to the gear list.", "ok")
+                return redirect(url_for("events.detail", event_id=event_id, tab="gear"))
             flash(f"Inquiry created from request #{request_id}. Review the details, then build the gear list and quote.",
                   "ok")
             return redirect(url_for("events.detail", event_id=event_id))
@@ -125,6 +164,7 @@ def convert(request_id):
     return render_template(
         "requests/convert.html", req=req, answers=a, values=values, errors=errors, types=types,
         clients=client_choices(), client_why=client_why if client_match else None, venues=venue_choices(),
+        has_contact=intake.has_contact(a),
         filled=filled, file_count=db.scalar("SELECT COUNT(*) FROM client_request_files WHERE request_id = ?",
                                             (request_id,)),
     )
@@ -141,7 +181,13 @@ def add_to_event(request_id):
     filled = intake.add_to_event(req, event_id)
     message = f"Added request #{request_id} to this event"
     message += f", filling in {', '.join(filled).lower()}." if filled else "."
-    flash(message + " Anything that differed from what was already here is in the office notes.", "ok")
+    message += " Anything that differed from what was already here is in the office notes."
+    gear = len(intake.ai_details(req).get("gear") or [])
+    if gear:
+        flash(message + f" Check the {gear} gear item{'s' if gear != 1 else ''} from the documents below, then add "
+                        "them to the gear list.", "ok")
+        return redirect(url_for("events.detail", event_id=event_id, tab="gear"))
+    flash(message, "ok")
     return redirect(url_for("events.detail", event_id=event_id))
 
 

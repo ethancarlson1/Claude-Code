@@ -44,7 +44,10 @@ def test_render_blueprint_matches_the_app():
                  "value: /var/data/uploads", "key: BACKLINE_BEHIND_PROXY", "key: BACKLINE_SECRET_KEY",
                  "key: BACKLINE_SETUP_CODE", "generateValue: true"):
         assert text in blueprint, text
-    assert "waitress" in open(os.path.join(ROOT, "requirements.txt")).read()
+    assert "key: ANTHROPIC_API_KEY\n        sync: false" in blueprint  # asked for by Render, never kept in the file
+    requirements = open(os.path.join(ROOT, "requirements.txt")).read()
+    for package in ("waitress", "anthropic", "Pillow"):
+        assert package in requirements, package
     assert open(os.path.join(ROOT, ".python-version")).read().strip() == "3.12"
 
 

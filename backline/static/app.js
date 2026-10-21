@@ -271,4 +271,76 @@
       if (message) fileInput.reportValidity();
     });
   }
+
+  // Offer a gig: show who has the chosen skill, and their rate for it.
+  var offerForm = document.querySelector("form[data-offer-form]");
+  if (offerForm) {
+    var skillSelect = offerForm.querySelector("[data-skill-select]");
+    var fixedSkill = offerForm.querySelector("input[type=hidden][name=skill]");
+    var showAll = offerForm.querySelector("[data-show-all]");
+    var roleInput = offerForm.querySelector("[data-role-input]");
+    var filterCrew = function () {
+      var skill = skillSelect ? skillSelect.value : (fixedSkill ? fixedSkill.value : "");
+      offerForm.querySelectorAll("tr[data-candidate]").forEach(function (tr) {
+        var skills = JSON.parse(tr.getAttribute("data-skills"));
+        var rates = JSON.parse(tr.getAttribute("data-rates"));
+        tr.hidden = !!skill && skills.indexOf(skill) === -1 && !(showAll && showAll.checked);
+        var box = tr.querySelector("input[name=crew_ids]");
+        if (tr.hidden && box) box.checked = false;  // never send to someone you can't see
+        tr.querySelector("[data-rate]").textContent = rates[skill] || rates[""];
+      });
+    };
+    var lastSkill = skillSelect ? skillSelect.value : "";
+    if (skillSelect) skillSelect.addEventListener("change", function () {
+      if (roleInput && (!roleInput.value.trim() || roleInput.value === lastSkill)) roleInput.value = skillSelect.value;
+      lastSkill = skillSelect.value;
+      filterCrew();
+    });
+    if (showAll) showAll.addEventListener("change", filterCrew);
+    filterCrew();
+  }
+
+  // Gear from documents: show how many of the chosen item are free on the event's dates.
+  var suggestForm = document.querySelector("form[data-gear-suggestions]");
+  if (suggestForm) {
+    var freeMap = JSON.parse(document.getElementById("gear-free").textContent);
+    var showFree = function (tr) {
+      var free = freeMap[tr.querySelector("select").value];
+      var qty = parseInt(tr.querySelector("input[type=number]").value, 10) || 0;
+      var cell = tr.querySelector("[data-free]");
+      cell.textContent = free === undefined ? "—" : free;
+      cell.classList.toggle("error", free !== undefined && qty > free);
+    };
+    var onEdit = function (e) { var tr = e.target.closest("tr[data-suggestion]"); if (tr) showFree(tr); };
+    suggestForm.addEventListener("change", onEdit);
+    suggestForm.addEventListener("input", onEdit);
+  }
+
+  // Import with AI: check sizes before sending, then show that it's working (it can take a minute).
+  var aiForm = document.querySelector("form[data-ai-import]");
+  if (aiForm) {
+    var aiFiles = aiForm.querySelector("input[type=file]");
+    var aiText = aiForm.querySelector("textarea");
+    var aiCheck = function () {
+      var max = parseInt(aiFiles.getAttribute("data-max-bytes"), 10);
+      var maxFiles = parseInt(aiFiles.getAttribute("data-max-files"), 10);
+      var total = 0;
+      Array.prototype.forEach.call(aiFiles.files, function (f) { total += f.size; });
+      var message = "";
+      if (aiFiles.files.length > maxFiles) message = "Import up to " + maxFiles + " files at a time.";
+      else if (total > max) message = "These files add up to more than " + Math.floor(max / 1048576) + " MB. Import fewer at a time.";
+      else if (!aiFiles.files.length && !aiText.value.trim()) message = "Choose a file, or paste some text.";
+      aiFiles.setCustomValidity(message);
+      return message;
+    };
+    aiFiles.addEventListener("change", function () { if (aiCheck()) aiFiles.reportValidity(); });
+    aiText.addEventListener("input", aiCheck);
+    aiForm.addEventListener("submit", function (e) {
+      if (aiCheck()) { e.preventDefault(); aiFiles.reportValidity(); return; }
+      var button = aiForm.querySelector("button[type=submit]");
+      // After the browser has started sending, so the click still counts.
+      setTimeout(function () { button.disabled = true; button.textContent = "Reading…"; }, 0);
+      aiForm.querySelector("[data-busy]").hidden = false;
+    });
+  }
 })();

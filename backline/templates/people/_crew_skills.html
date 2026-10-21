@@ -1,0 +1,16 @@
+<section class="card" id="skills">
+  <h2>Skills &amp; rates</h2>
+  <p class="small">Tick what they can do. Fill in a rate only where it differs from their usual day or hourly rate above. Edit the list of skills under <a href="{{ url_for('offers.settings') }}">Settings → Crew &amp; email</a>.</p>
+  {% if skill_error %}<div class="flash flash-bad">{{ skill_error }}</div>{% endif %}
+  <div class="table-wrap"><table>
+    <thead><tr><th>Skill</th><th class="num">Day rate</th><th class="num">Hourly rate</th></tr></thead>
+    <tbody>
+    {% for skill in skill_options %}{% set v = skill_values.get(skill) %}
+      <tr>
+        <td><label class="check"><input type="checkbox" name="skills" value="{{ skill }}" {% if v %}checked{% endif %}> {{ skill }}</label></td>
+        <td class="num"><input name="skill_day:{{ skill }}" inputmode="decimal" value="{{ '%g'|format(v.day_rate) if v and v.day_rate is not none else '' }}" placeholder="usual" style="width:96px" aria-label="Day rate as {{ skill }}"></td>
+        <td class="num"><input name="skill_hourly:{{ skill }}" inputmode="decimal" value="{{ '%g'|format(v.hourly_rate) if v and v.hourly_rate is not none else '' }}" placeholder="usual" style="width:96px" aria-label="Hourly rate as {{ skill }}"></td>
+      </tr>
+    {% endfor %}
+    </tbody></table></div>
+</section>

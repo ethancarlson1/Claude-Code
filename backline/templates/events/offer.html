@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf, badge %}
+{% block title %}Offer a gig{% endblock %}
+{% block heading %}<h1>{{ 'Offer to more people' if opening else 'Offer a gig' }}</h1>
+  <div class="sub"><a href="{{ url_for('events.detail', event_id=event.id, tab='crew') }}">{{ event.title }}</a> · {{ event.event_date|fdate }}{% if event.end_date %} to {{ event.end_date|fdate }}{% endif %}</div>{% endblock %}
+{% block content %}
+{% macro err(key) %}{% if errors.get(key) %}<div class="error">{{ errors[key] }}</div>{% endif %}{% endmacro %}
+<form method="post" class="stack" data-offer-form>
+  {{ csrf() }}
+  {% if opening %}<input type="hidden" name="opening" value="{{ opening.id }}">{% endif %}
+  <section class="card">
+    <h2>The gig</h2>
+    {% if opening %}
+      <dl class="facts">
+        <dt>Job</dt><dd>{{ opening.role }}{% if opening.skill %} <span class="muted small">({{ opening.skill }})</span>{% endif %}</dd>
+        <dt>Filled so far</dt><dd>{{ filled }} of {{ opening.needed }}</dd>
+        {% if opening.call_time %}<dt>Call</dt><dd>{{ opening.call_time|ftime }}</dd>{% endif %}
+        <dt>Pay</dt><dd>{{ "Each person's own rate" if opening.pay_type == 'own' else pay_text(opening.pay_type, opening.pay_rate, opening.hours) }}</dd>
+      </dl>
+      <input type="hidden" name="skill" value="{{ values.skill }}">
+      <div class="field{% if errors.needed %} has-error{% endif %}" style="max-width:220px;margin-top:.6rem"><label for="o-needed">People needed in total</label><input id="o-needed" name="needed" type="number" min="1" max="50" value="{{ values.needed }}">{{ err('needed') }}
+        <div class="help">Raise it to take on more people.</div></div>
+    {% else %}
+    <div class="grid-form">
+      <div class="field"><label for="o-skill">Skill needed</label>
+        <select id="o-skill" name="skill" data-skill-select>
+          <option value="">Any skill</option>
+          {% for s in skills %}<option {% if s == values.skill %}selected{% endif %}>{{ s }}</option>{% endfor %}
+        </select>
+        <div class="help">Shows who has it, and their rate for it.</div></div>
+      <div class="field{% if errors.role %} has-error{% endif %}"><label for="o-role">Job, as crew will see it</label><input id="o-role" name="role" value="{{ values.role }}" placeholder="e.g. A2 / mic tech" required data-role-input>{{ err('role') }}</div>
+      <div class="field{% if errors.needed %} has-error{% endif %}"><label for="o-needed">How many people</label><input id="o-needed" name="needed" type="number" min="1" max="50" value="{{ values.needed }}">{{ err('needed') }}</div>
+      <div class="field{% if errors.call_time %} has-error{% endif %}"><label for="o-call">Call time</label><input id="o-call" name="call_time" type="time" value="{{ values.call_time }}">{{ err('call_time') }}</div>
+      <div class="field wide{% if errors.pay_rate %} has-error{% endif %}" role="group" aria-labelledby="o-pay-label">
+        <div class="group-label" id="o-pay-label">Pay</div>
+        <div class="choice-list">
+          <label class="check"><input type="radio" name="pay_type" value="own" {% if values.pay_type == 'own' %}checked{% endif %}> <span>Each person's own rate for this skill <span class="small muted">(from their crew profile; day rates × {{ days }} day{{ 's' if days != 1 }})</span></span></label>
+          <label class="check"><input type="radio" name="pay_type" value="flat" {% if values.pay_type == 'flat' %}checked{% endif %}> <span>The same flat amount for everyone, for the whole gig</span></label>
+          <label class="check"><input type="radio" name="pay_type" value="hourly" {% if values.pay_type == 'hourly' %}checked{% endif %}> <span>The same hourly rate for everyone</span></label>
+        </div>
+        <div class="form-row" style="margin-top:.5rem">
+          <div class="field"><label for="o-rate">Amount or hourly rate ($)</label><input id="o-rate" name="pay_rate" inputmode="decimal" value="{{ values.pay_rate }}" placeholder="e.g. 300"></div>
+          <div class="field"><label for="o-hours">Estimated hours</label><input id="o-hours" name="hours" inputmode="decimal" value="{{ values.hours }}" placeholder="e.g. 8"></div>
+        </div>
+        {{ err('pay_rate') }}{{ err('hours') }}
+      </div>
+      <div class="field wide"><label for="o-notes">Notes for crew</label><textarea id="o-notes" name="notes" rows="3" placeholder="e.g. Black clothes. Parking in the venue lot. Bring your own in-ears.">{{ values.notes }}</textarea></div>
+    </div>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2>Who to offer it to</h2>
+      <label class="check small"><input type="checkbox" data-show-all> Show crew without this skill</label></div>
+    {{ err('crew_ids') }}
+    <div class="table-wrap"><table>
+      <thead><tr><th class="check-col"></th><th>Name</th><th>Skills</th><th>Their rate</th><th>On {{ event.event_date|fdate('short') }}</th></tr></thead>
+      <tbody>
+      {% for c in candidates %}{% set m = c.row %}
+        <tr data-candidate data-skills="{{ c.skills|tojson|forceescape }}" data-rates="{{ c.rates|tojson|forceescape }}">
+          <td class="check-col"><input class="big-check" type="checkbox" name="crew_ids" value="{{ m.id }}" aria-label="Offer to {{ m.name }}"
+              {% if m.id in picked %}checked{% endif %} {% if c.on_event or c.offered in ('sent', 'accepted') %}disabled{% endif %}></td>
+          <td><strong>{{ m.name }}</strong>{% if m.role %}<div class="small muted">{{ m.role }}</div>{% endif %}
+            {% if not m.email %}<div class="small muted">No email: send by text</div>{% endif %}</td>
+          <td class="small">{{ c.skills|join(', ') or '—' }}</td>
+          <td class="small" data-rate>{{ c.rates.get(values.skill, c.rates['']) }}</td>
+          <td class="small">
+            {% if c.on_event %}<span class="badge badge-ok">On this event</span>
+            {% elif c.offered %}{{ badge(c.offered, {'sent': 'Offer waiting', 'accepted': 'Accepted', 'declined': 'Declined', 'filled': 'Spot filled', 'withdrawn': 'Withdrawn'}[c.offered]) }}
+            {% elif c.busy %}{% for reason in c.busy %}<div class="error">{{ reason }}</div>{% endfor %}
+            {% else %}<span class="badge badge-ok">Free</span>{% endif %}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="5" class="muted">No active crew yet. Add people under Crew.</td></tr>
+      {% endfor %}
+      </tbody></table></div>
+    <p class="help">Spots go to whoever accepts first. Once it's full, everyone else's offer closes.</p>
+    {% if can_email %}
+      <label class="check" style="margin-top:.6rem"><input type="checkbox" name="email" value="1" {% if values.email == '1' %}checked{% endif %}> Email the offer to them now</label>
+    {% else %}
+      <input type="hidden" name="email" value="0">
+      <p class="small">Email isn't set up yet (<a href="{{ url_for('offers.settings') }}">Settings → Crew &amp; email</a>), so after sending you'll get Email and Text buttons for each person. They open your own email or texting app with the offer written in.</p>
+    {% endif %}
+    <div class="form-actions"><button class="btn btn-primary" type="submit">Send offer</button><a class="btn" href="{{ url_for('events.detail', event_id=event.id, tab='crew') }}">Cancel</a></div>
+  </section>
+</form>
+{% endblock %}

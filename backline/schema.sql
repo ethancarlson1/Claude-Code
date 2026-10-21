@@ -54,8 +54,32 @@ CREATE TABLE IF NOT EXISTS crew (
     w9_on_file INTEGER NOT NULL DEFAULT 0,       -- for contractor tax forms
     notes TEXT,
     active INTEGER NOT NULL DEFAULT 1,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    portal_key TEXT                              -- their personal crew page link (unique; see crew.py)
 );
+
+-- What each crew member can do, with their rate for it when it differs from
+-- their usual day/hourly rate. Skill names come from Settings → Crew.
+CREATE TABLE IF NOT EXISTS crew_skills (
+    id INTEGER PRIMARY KEY,
+    crew_id INTEGER NOT NULL REFERENCES crew(id) ON DELETE CASCADE,
+    skill TEXT NOT NULL,
+    day_rate REAL,
+    hourly_rate REAL,
+    UNIQUE (crew_id, skill)
+);
+
+-- Days a crew member can't work, from their crew page or the office.
+CREATE TABLE IF NOT EXISTS crew_unavailable (
+    id INTEGER PRIMARY KEY,
+    crew_id INTEGER NOT NULL REFERENCES crew(id) ON DELETE CASCADE,
+    start_date TEXT NOT NULL,
+    end_date TEXT NOT NULL,
+    note TEXT,
+    added_by TEXT,                               -- crew | office
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_crew_unavailable ON crew_unavailable(crew_id, end_date);
 
 CREATE TABLE IF NOT EXISTS inventory_items (
     id INTEGER PRIMARY KEY,
@@ -157,6 +181,41 @@ CREATE TABLE IF NOT EXISTS event_crew (
     paid_method TEXT,
     paid_reference TEXT
 );
+
+-- Crew an event still needs: offered to several people, filled by the first
+-- to accept. Accepting creates the event_crew assignment.
+CREATE TABLE IF NOT EXISTS crew_openings (
+    id INTEGER PRIMARY KEY,
+    event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    skill TEXT,                                  -- who it's for (Settings → Crew)
+    role TEXT NOT NULL,                          -- what they'll do, as crew see it
+    needed INTEGER NOT NULL DEFAULT 1,
+    call_time TEXT,
+    pay_type TEXT NOT NULL DEFAULT 'own',        -- own (each person's rate for the skill) | flat | hourly
+    pay_rate REAL,
+    hours REAL,                                  -- estimated hours
+    notes TEXT,                                  -- shown to crew with the offer
+    status TEXT NOT NULL DEFAULT 'open',         -- open | filled | cancelled
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_crew_openings_event ON crew_openings(event_id);
+
+CREATE TABLE IF NOT EXISTS crew_offers (
+    id INTEGER PRIMARY KEY,
+    opening_id INTEGER NOT NULL REFERENCES crew_openings(id) ON DELETE CASCADE,
+    crew_id INTEGER NOT NULL REFERENCES crew(id) ON DELETE CASCADE,
+    status TEXT NOT NULL DEFAULT 'sent',         -- sent | accepted | declined | filled | withdrawn
+    pay_type TEXT NOT NULL DEFAULT 'flat',       -- what this person is offered: flat | hourly
+    pay_rate REAL,
+    hours REAL,
+    assignment_id INTEGER REFERENCES event_crew(id) ON DELETE SET NULL,
+    note TEXT,                                   -- from the crew member, with their answer
+    sent_at TEXT NOT NULL,
+    emailed_at TEXT,
+    responded_at TEXT,
+    UNIQUE (opening_id, crew_id)
+);
+CREATE INDEX IF NOT EXISTS idx_crew_offers_crew ON crew_offers(crew_id, status);
 
 -- Audio / backline needs for an event. item_id is NULL for sub-rentals or
 -- anything not tracked in inventory. pulled/loaded/returned drive the
@@ -345,7 +404,10 @@ CREATE TABLE IF NOT EXISTS client_requests (
     event_id INTEGER REFERENCES events(id) ON DELETE SET NULL,  -- the event it became or was added to
     ip TEXT,
     created_at TEXT NOT NULL,
-    handled_at TEXT
+    handled_at TEXT,
+    source TEXT NOT NULL DEFAULT 'form',         -- form (the public request form) | import (documents read by AI)
+    suggested_event_id INTEGER REFERENCES events(id) ON DELETE SET NULL,  -- imports: the event the AI matched
+    ai_details TEXT                              -- imports: model, cost, quotes, other details (JSON, see ai_import.py)
 );
 CREATE INDEX IF NOT EXISTS idx_client_requests_status ON client_requests(status, created_at);
 
@@ -358,6 +420,35 @@ CREATE TABLE IF NOT EXISTS client_request_files (
     stored_name TEXT NOT NULL UNIQUE,
     size INTEGER NOT NULL DEFAULT 0
 );
+
+-- Gear a rider or other document asked for (read by AI), waiting on the
+-- event's Audio & backline tab for someone to check and add to the gear list.
+CREATE TABLE IF NOT EXISTS gear_suggestions (
+    id INTEGER PRIMARY KEY,
+    event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    request_id INTEGER REFERENCES client_requests(id) ON DELETE SET NULL,
+    requested TEXT NOT NULL,                     -- as the document put it
+    quantity INTEGER NOT NULL DEFAULT 1,
+    item_id INTEGER REFERENCES inventory_items(id) ON DELETE SET NULL,  -- the AI's match
+    match TEXT NOT NULL DEFAULT 'none',          -- same | substitute | none
+    quote TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',      -- pending | added | dismissed
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_gear_suggestions_event ON gear_suggestions(event_id, status);
+
+-- Each AI import, for the spending summary in Settings → AI import.
+CREATE TABLE IF NOT EXISTS ai_usage (
+    id INTEGER PRIMARY KEY,
+    created_at TEXT NOT NULL,
+    model TEXT NOT NULL,
+    input_tokens INTEGER NOT NULL DEFAULT 0,
+    output_tokens INTEGER NOT NULL DEFAULT 0,
+    cost REAL NOT NULL DEFAULT 0,                -- estimated, in dollars
+    outcome TEXT NOT NULL DEFAULT 'ok',          -- ok | declined | too long | unreadable answer
+    request_id INTEGER REFERENCES client_requests(id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS idx_ai_usage_created ON ai_usage(created_at);
 
 -- Wrong passwords at sign-in, used to slow down password guessing.
 CREATE TABLE IF NOT EXISTS login_failures (

@@ -102,6 +102,12 @@ RUN OF SHOW:
 - 0:00 PM  Show ends, strike
 """
 
+# Skills crew can have (Settings → Crew). Each person can have their own rate for each.
+DEFAULT_CREW_SKILLS = [
+    "A1 / FOH engineer", "A2 / mic tech", "Monitor engineer", "RF / wireless tech", "Backline tech", "Drum tech",
+    "Stagehand", "Driver", "Crew chief / production manager", "Lighting", "Video / streaming",
+]
+
 DEFAULT_SETTINGS = {
     "company_name": COMPANY_NAME,
     "company_address": "Chicago, IL",
@@ -113,6 +119,7 @@ DEFAULT_SETTINGS = {
     "contract_prefix": "CT-",
     "invoice_terms": "Payment due within 15 days. Late balances are subject to a 1.5% monthly fee.",
     "crew_pay_days": "14",
+    "crew_skills": "\n".join(DEFAULT_CREW_SKILLS),
     "logo_file": "",  # an uploaded replacement logo; empty = the built-in one
     "request_form_enabled": "1",   # the public event request form at /request
     # QuickBooks Online (Settings → QuickBooks). Nothing is sent until someone connects.

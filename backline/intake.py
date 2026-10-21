@@ -313,9 +313,14 @@ FIELD_LABELS = {
 }
 
 
+def has_contact(a):
+    """Enough to make a client from. (Form requests always have a name; documents read by AI may not.)"""
+    return bool(a.get("name") or a.get("organization"))
+
+
 def client_fields(a):
-    return {"name": a["name"], "company": a.get("organization"), "email": a.get("email"), "phone": a.get("phone"),
-            "notes": "Added from an online event request."}
+    return {"name": a.get("name") or a["organization"], "company": a.get("organization"), "email": a.get("email"),
+            "phone": a.get("phone"), "notes": "Added from an online event request."}
 
 
 def venue_fields(a):
@@ -334,8 +339,10 @@ def venue_fields(a):
 def title_for(a):
     if a.get("event_name"):
         return a["event_name"]
-    who = a.get("organization") or a["name"]
+    who = a.get("organization") or a.get("name")
     kind = a.get("event_type") if a.get("event_type") in _type_names() else None
+    if not who:
+        return kind or "New inquiry"
     return f"{who} — {kind}" if kind else f"{who} event"
 
 
@@ -343,7 +350,13 @@ def office_notes(req, a, left_out=()):
     """The office-only notes for the event: who asked, plus answers that
     don't have their own place on the event."""
     contact = " · ".join(x for x in (a.get("name"), a.get("organization"), a.get("email"), a.get("phone")) if x)
-    lines = [f"From online request #{req['id']}, received {util.fdatetime(req['created_at'])}.", f"Contact: {contact}"]
+    if req["source"] == "import":
+        lines = [f"From documents read by AI (request #{req['id']}), imported {util.fdatetime(req['created_at'])}. "
+                 "Check anything important against the documents."]
+    else:
+        lines = [f"From online request #{req['id']}, received {util.fdatetime(req['created_at'])}."]
+    if contact:
+        lines.append(f"Contact: {contact}")
     for key, label in (("description", "About the event"), ("layout", "Layout"), ("stage", "Stage"),
                        ("venue_contact", "Venue contact"), ("planner", "Planner"), ("budget", "Budget"),
                        ("notes", "Other notes")):
@@ -351,7 +364,19 @@ def office_notes(req, a, left_out=()):
             lines.append(f"{label}: {a[key]}")
     for label, value in left_out:
         lines.append(f"{label} (from the request): {value}")
+    other = ai_details(req).get("other") or []
+    if other:
+        lines.append("Also in the documents:\n" + "\n".join(f"- {line}" for line in other))
     return "\n".join(lines)
+
+
+def ai_details(req):
+    """What the AI said about a request it read from documents (see ai_import.py)."""
+    try:
+        data = json.loads(req["ai_details"] or "{}")
+    except ValueError:
+        return {}
+    return data if isinstance(data, dict) else {}
 
 
 def matching_client(a):
@@ -365,6 +390,8 @@ def matching_client(a):
         for row in db.query("SELECT id, phone FROM clients WHERE phone IS NOT NULL AND phone != ''"):
             if re.sub(r"\D", "", row["phone"])[-10:] == digits:
                 return row["id"], "same phone"
+    if not a.get("name"):
+        return None, None
     row = db.query("SELECT id FROM clients WHERE lower(name) = lower(?)", (a["name"],), one=True)
     return (row["id"], "same name") if row else (None, None)
 
@@ -397,15 +424,31 @@ def guess_category(filename):
 def move_files(req, event_id):
     """Attach the request's files to the event's documents (office-only until
     someone shares them with crew)."""
-    source = req["organization"] or req["name"]
+    imported = req["source"] == "import"
+    a = answers_of(req)
+    source = (a.get("organization") or a.get("name")) if imported else (req["organization"] or req["name"])
     for f in db.query("SELECT * FROM client_request_files WHERE request_id = ? ORDER BY id", (req["id"],)):
         db.insert("event_files", {
             "event_id": event_id, "category": guess_category(f["original_name"]),
-            "description": f"From online request #{req['id']}", "source": source,
-            "original_name": f["original_name"], "stored_name": f["stored_name"], "size": f["size"],
-            "crew_visible": 0, "uploaded_by": "online request", "uploaded_at": util.now_iso(),
+            "description": f"Read by AI (request #{req['id']})" if imported else f"From online request #{req['id']}",
+            "source": source, "original_name": f["original_name"], "stored_name": f["stored_name"], "size": f["size"],
+            "crew_visible": 0, "uploaded_by": "AI import" if imported else "online request",
+            "uploaded_at": util.now_iso(),
         })
     db.execute("DELETE FROM client_request_files WHERE request_id = ?", (req["id"],))
+
+
+def move_gear(req, event_id):
+    """The gear list read from the documents waits on the event's Audio &
+    backline tab for someone to check. Returns how many lines."""
+    lines = ai_details(req).get("gear") or []
+    for g in lines:
+        db.insert("gear_suggestions", {
+            "event_id": event_id, "request_id": req["id"], "requested": g["requested"], "quantity": g["quantity"],
+            "item_id": g.get("item_id"), "match": g.get("match") or "none", "quote": g.get("quote"),
+            "created_at": util.now_iso(),
+        })
+    return len(lines)
 
 
 def _client_for(a, choice):
@@ -442,6 +485,7 @@ def create_event(req, title, event_date, end_date, event_type, client_choice, ve
     for template_id in profile["checklists"]:
         services.apply_checklist_template(event_id, template_id)
     move_files(req, event_id)
+    move_gear(req, event_id)
     db.update("client_requests", req["id"], {"status": "converted", "event_id": event_id, "handled_at": util.now_iso()})
     return event_id
 
@@ -465,7 +509,7 @@ def add_to_event(req, event_id):
             left_out.append((FIELD_LABELS[key], value))
     if a.get("event_date") and a["event_date"] != event["event_date"]:
         left_out.insert(0, ("Date", util.fdate(a["event_date"])))
-    if not event["client_id"]:
+    if not event["client_id"] and has_contact(a):
         match, _why = matching_client(a)
         updates["client_id"] = match or db.insert("clients", client_fields(a))
     if not event["venue_id"] and a.get("venue_name"):
@@ -475,6 +519,7 @@ def add_to_event(req, event_id):
     updates["updated_at"] = util.now_iso()
     db.update("events", event_id, updates)
     move_files(req, event_id)
+    move_gear(req, event_id)
     db.update("client_requests", req["id"], {"status": "converted", "event_id": event_id, "handled_at": util.now_iso()})
     return [label for key, label in FIELD_LABELS.items() if key in updates]
 

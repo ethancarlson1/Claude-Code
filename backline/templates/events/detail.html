@@ -20,6 +20,9 @@
   {% endfor %}
 </nav>
 
+{% if pending_gear and tab != 'gear' %}
+<div class="flash">{{ pending_gear }} gear item{{ 's' if pending_gear != 1 }} read from documents {{ 'are' if pending_gear != 1 else 'is' }} waiting to be checked. <a href="{{ url_for('events.detail', event_id=event.id, tab='gear') }}#gear-suggestions">Check {{ 'them' if pending_gear != 1 else 'it' }}</a></div>
+{% endif %}
 {% if shortages and tab in ('overview', 'gear') %}
 <div class="alert-box">
   <strong>Gear conflict:</strong> not enough stock for {{ shortages|length }} item{{ 's' if shortages|length != 1 }} on these dates.
@@ -163,6 +166,44 @@
 
 {# ---------------------------------------------------------------------- CREW #}
 {% if tab == 'crew' %}
+<section class="card" id="openings">
+  <div class="card-head"><h2>Crew needed</h2><a class="btn btn-small btn-primary" href="{{ url_for('offers.new', event_id=event.id) }}">+ Offer a gig</a></div>
+  {% for op in openings %}{% set o_row = op.row %}
+  <div class="opening">
+    <div class="opening-head">
+      <strong>{{ o_row.role }}</strong> · {{ op.taken }} of {{ o_row.needed }} filled {{ badge(o_row.status) }}
+      <span class="small muted">{% if o_row.call_time %}call {{ o_row.call_time|ftime }} · {% endif %}{{ "each person's own rate" if o_row.pay_type == 'own' else pay_text(o_row.pay_type, o_row.pay_rate, o_row.hours) }}</span>
+      <span class="opening-actions">
+        <a class="btn btn-small" href="{{ url_for('offers.new', event_id=event.id, opening=o_row.id) }}">Offer to more people</a>
+        <form method="post" action="{{ url_for('offers.cancel', event_id=event.id, opening_id=o_row.id) }}" class="inline" data-confirm="Close this opening? Offers still waiting are withdrawn.">{{ csrf() }}<button class="btn btn-small" type="submit">Close</button></form>
+      </span>
+    </div>
+    {% if op.offers %}
+    <div class="table-wrap"><table class="small">
+      <tbody>
+      {% for o in op.offers %}
+        <tr>
+          <td><strong>{{ o.name }}</strong></td>
+          <td>{{ badge(o.status, offer_statuses[o.status]) }}{% if o.note %} <span class="muted">“{{ o.note }}”</span>{% endif %}</td>
+          <td class="muted">{{ pay_text(o.pay_type, o.pay_rate, o.hours) }}</td>
+          <td class="muted nowrap">sent {{ o.sent_at|fdatetime }}{% if o.emailed_at %} · emailed{% endif %}</td>
+          <td class="nowrap">
+            {% if o.status == 'sent' %}{% set m = offer_messages[o.id] %}
+              {% if can_email and o.email %}<form method="post" action="{{ url_for('offers.email', event_id=event.id, offer_id=o.id) }}" class="inline">{{ csrf() }}<button class="btn btn-small" type="submit">{{ 'Email again' if o.emailed_at else 'Email' }}</button></form>
+              {% elif o.email %}<a class="btn btn-small" href="{{ mailto(o.email, m[0], m[1]) }}">Email</a>{% endif %}
+              {% if o.phone %}<a class="btn btn-small" href="{{ sms_link(o.phone, m[2]) }}">Text</a>{% endif %}
+              <form method="post" action="{{ url_for('offers.withdraw', event_id=event.id, offer_id=o.id) }}" class="inline">{{ csrf() }}<button class="link small" type="submit">Withdraw</button></form>
+            {% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody></table></div>
+    {% endif %}
+  </div>
+  {% else %}
+  <p class="muted small">Need people? <strong>Offer a gig</strong> to the crew with the right skills who are free that day. They accept or decline on their crew page, and the first to accept are added below.</p>
+  {% endfor %}
+</section>
 <section class="card">
   <div class="card-head"><h2>Crew</h2><span class="muted small">Each person gets a private worksheet link with their call time, role and pay.</span></div>
   {% if crew %}
@@ -219,8 +260,23 @@
     <p class="muted">No crew assigned yet.</p>
   {% endif %}
 </section>
+<section class="card" id="crew-message">
+  <h2>Send the crew an update</h2>
+  {% if can_email %}
+  <form method="post" action="{{ url_for('offers.message', event_id=event.id) }}">
+    {{ csrf() }}
+    <div class="field"><label for="crew-update">Message</label><textarea id="crew-update" name="message" rows="3" placeholder="e.g. Call time moved to 3:30 PM. Load in through the north dock." required></textarea></div>
+    <div class="form-actions"><button class="btn" type="submit">Email everyone confirmed</button><span class="help">Each person gets the message with a link to their job sheet.</span></div>
+  </form>
+  {% elif crew_emails %}
+  <p class="small">Opens your email app with everyone confirmed on this event in BCC. (Set up email under <a href="{{ url_for('offers.settings') }}">Settings → Crew &amp; email</a> to send from here, with each person's job sheet link.)</p>
+  <p><a class="btn btn-small" href="mailto:?bcc={{ crew_emails|join(',')|urlencode }}&subject={{ ('Update: ' ~ event.title ~ ' · ' ~ event.event_date|fdate('short'))|urlencode }}">Email the crew</a></p>
+  {% else %}
+  <p class="muted small">Once people are confirmed, you can send them updates from here.</p>
+  {% endif %}
+</section>
 <section class="card" id="crew-add">
-  <h2>Add crew</h2>
+  <h2>Add crew directly</h2>
   {% if crew_options %}
   <form method="post" action="{{ url_for('events.add_crew', event_id=event.id) }}" class="form-row">
     {{ csrf() }}
@@ -241,6 +297,38 @@
 
 {# ---------------------------------------------------------------------- GEAR #}
 {% if tab == 'gear' %}
+{% if suggestions %}
+<section class="card ai-card" id="gear-suggestions">
+  <div class="card-head"><h2>Gear from the documents</h2><span class="small muted">Read by AI · check before adding</span></div>
+  <p class="small">For each line, pick the item to add, a sub-rental, or leave it out. <strong>Free</strong> is how many aren't booked on other events on these dates.</p>
+  <form method="post" action="{{ url_for('events.apply_gear_suggestions', event_id=event.id) }}" data-gear-suggestions>
+    {{ csrf() }}
+    <script type="application/json" id="gear-free">{{ free|tojson }}</script>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Asked for</th><th>Add as</th><th class="num">Qty</th><th class="num">Free</th></tr></thead>
+      <tbody>
+      {% for s in suggestions %}
+        <tr data-suggestion>
+          <td><strong>{{ s.requested }}</strong> <span class="muted">× {{ s.quantity }}</span>
+            {% if s.match == 'substitute' %}<span class="badge badge-warn">substitute</span>{% elif s.match == 'none' %}<span class="badge badge-muted">not in inventory</span>{% endif %}
+            {% if s.quote %}<span class="ai-quote">“{{ s.quote }}”</span>{% endif %}</td>
+          <td><select name="item_{{ s.id }}" aria-label="Add {{ s.requested }} as">
+              <option value="">Leave out</option>
+              <option value="sub" {% if not s.item_id %}selected{% endif %}>Sub-rental / not stocked</option>
+              {% for category, items in item_groups %}<optgroup label="{{ category }}">{% for i in items %}<option value="{{ i.id }}" {% if i.id == s.item_id %}selected{% endif %}>{{ i.name }}</option>{% endfor %}</optgroup>{% endfor %}
+            </select>
+            {% if on_list.get(s.item_id) %}<div class="small muted">Already on the gear list: {{ on_list[s.item_id] }}</div>{% endif %}</td>
+          <td class="num"><input type="number" name="qty_{{ s.id }}" value="{{ s.quantity }}" min="1" max="999" style="width:64px" aria-label="Quantity"></td>
+          <td class="num" data-free><span class="{{ 'error' if s.item_id and free.get(s.item_id, 0) < s.quantity }}">{{ free.get(s.item_id, 0) if s.item_id else '—' }}</span></td>
+        </tr>
+      {% endfor %}
+      </tbody></table></div>
+    <div class="form-actions"><button class="btn btn-primary" type="submit" name="action" value="add">Add to gear list</button>
+      <button class="btn" type="submit" name="action" value="dismiss" data-confirm-button="Dismiss all of the gear from the documents?">Dismiss all</button></div>
+    <p class="help">Lines set to “Leave out” are dismissed. An item that's already on the gear list keeps the larger of the two quantities.</p>
+  </form>
+</section>
+{% endif %}
 <section class="card">
   <div class="card-head">
     <h2>Audio &amp; backline</h2>
@@ -521,6 +609,7 @@
 {% if tab == 'documents' %}
 <section class="card" id="files">
   <div class="card-head"><h2>Event documents</h2><span class="muted small">Stage plots, input lists, riders, tech packs, maps: anything you'll want to find later.</span></div>
+  <p class="small">Got a rider, tech pack or email with details for this event? <a class="btn btn-small" href="{{ url_for('imports.new', event=event.id) }}">Read it with AI</a> <span class="muted">It fills in what the event is missing, after you've checked it.</span></p>
   {% if files %}
   <div class="table-wrap">
   <table>

@@ -113,7 +113,7 @@ legend { font-weight: 600; padding: 0 .4rem; margin-left: -.4rem; }
 .cols > .card { margin: 0; }
 .stack > * + * { margin-top: 1.2rem; }
 .split { display: grid; grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr); gap: 1.2rem; align-items: start; }
-@media (max-width: 1000px) { .split { grid-template-columns: 1fr; } }
+@media (max-width: 1000px) { .split { grid-template-columns: minmax(0, 1fr); } }
 
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1rem; margin-bottom: 1.2rem; }
 .stat { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem 1.1rem; box-shadow: var(--shadow); color: var(--text); display: block; }
@@ -177,7 +177,7 @@ input, select, textarea {
   background: var(--surface); color: var(--text); width: 100%; min-width: 0;
 }
 input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
-input[type=checkbox] { width: auto; accent-color: var(--accent); }
+input[type=checkbox], input[type=radio] { width: auto; accent-color: var(--accent); }
 textarea { resize: vertical; }
 label.check { display: flex; align-items: center; gap: .5rem; font-weight: 500; }
 label.check input { flex: none; }
@@ -262,6 +262,10 @@ body.auth-page { display: grid; place-items: center; min-height: 100vh; padding:
 
 /* Printable documents (worksheet, contract, invoice) */
 body.doc-page { background: var(--bg); }
+
+.demo-banner { background: var(--brand); color: #04121c; text-align: center; font-size: .85rem; padding: .4rem 1rem; }
+.demo-banner .link { color: #04121c; text-decoration: underline; font-weight: 650; margin-left: .4rem; }
+body.auth-page .demo-banner { position: fixed; top: 0; left: 0; right: 0; z-index: 30; }
 
 /* Public event request form */
 body.intake-page { background: var(--bg); }
@@ -384,6 +388,37 @@ body.intake-page { background: var(--bg); }
 /* Event chat in the office view */
 .chat-admin .msg { border: 1px solid var(--border); border-radius: 10px; padding: .5rem .8rem; margin: .5rem 0; background: var(--surface-2); }
 .chat-admin .msg.staff { background: var(--accent-soft); }
+
+/* Crew offers and the crew page */
+.plain-list { list-style: none; padding: 0; margin: 0 0 .6rem; }
+.plain-list li { padding: .35rem 0; border-bottom: 1px solid var(--border); }
+.opening { border: 1px solid var(--border); border-radius: var(--radius); padding: .7rem .8rem; margin-top: .7rem; }
+.opening-head { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .6rem; }
+.opening-actions { margin-left: auto; display: flex; gap: .4rem; align-items: center; }
+.opening table { margin-top: .5rem; }
+.crew-portal .offer { border: 1px solid var(--border); border-radius: var(--radius); padding: .8rem .9rem; margin-top: .7rem; background: var(--surface); }
+.crew-portal .offer:first-of-type { margin-top: .3rem; }
+.offer-head { margin-bottom: .4rem; }
+.offer-pay { font-weight: 650; font-size: 1.05rem; margin-bottom: .5rem; }
+.crew-portal .offer input[name=note] { margin-top: .3rem; }
+.crew-portal .form-actions .btn { min-width: 7rem; }
+.count-pill { display: inline-block; min-width: 1.5rem; padding: 0 .45rem; border-radius: 999px; background: var(--accent); color: #fff; font-size: .8rem; text-align: center; vertical-align: middle; }
+
+/* AI import */
+.ai-card { border-left: 4px solid var(--info); }
+form[data-ai-import] .field { margin-bottom: 1rem; }
+.choice-list { display: grid; gap: .8rem; }
+.choice-list label.check { align-items: flex-start; font-weight: 400; }
+.choice-list input { margin-top: .25rem; flex: none; }
+.ai-quote { display: block; margin-top: .2rem; font-size: .82rem; font-style: italic; color: var(--muted); overflow-wrap: anywhere; }
+.ai-busy { display: flex; align-items: center; gap: .6rem; margin-top: .8rem; font-weight: 600; }
+.ai-busy[hidden] { display: none; }
+.spinner { width: 1.1rem; height: 1.1rem; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%;
+  animation: spin .8s linear infinite; flex: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.4s; } }
+ol.steps { padding-left: 1.2rem; margin: 0 0 .8rem; }
+ol.steps li { margin-bottom: .5rem; }
 
 @media print {
   body, body.doc-page { background: #fff; }

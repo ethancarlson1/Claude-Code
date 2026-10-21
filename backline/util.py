@@ -155,6 +155,12 @@ def mailto(to, subject, body):
     return f"mailto:{quote(to or '')}?subject={quote(subject)}&body={quote(body)}"
 
 
+def sms_link(phone, body):
+    """Opens the phone's texting app with the message written in."""
+    digits = re.sub(r"[^\d+]", "", phone or "")
+    return f"sms:{digits}?&body={quote(body)}" if digits else ""
+
+
 def maps_url(*parts):
     query = ", ".join(p for p in parts if p)
     return f"https://www.google.com/maps/search/?api=1&query={quote(query)}" if query else ""
@@ -184,6 +190,11 @@ def status_class(status):
         "maintenance": "warn",
         "retired": "muted",
         "new": "info",          # event requests
+        "accepted": "ok",       # crew gig offers
+        "declined": "bad",
+        "filled": "muted",
+        "withdrawn": "muted",
+        "open": "warn",
         "converted": "ok",
         "archived": "muted",
     }.get(status, "muted")
@@ -197,4 +208,4 @@ def init_app(app):
         fdatetime=fdatetime,
         status_class=status_class,
     )
-    app.jinja_env.globals.update(mailto=mailto, today=today, maps_url=maps_url)
+    app.jinja_env.globals.update(mailto=mailto, sms_link=sms_link, today=today, maps_url=maps_url)

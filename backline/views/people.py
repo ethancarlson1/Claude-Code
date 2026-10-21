@@ -2,7 +2,7 @@
 
 from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
 
-from .. import db, forms, services, util
+from .. import crew, db, forms, services, util
 from ..defaults import VEHICLE_TYPES
 from ..forms import Field
 
@@ -51,7 +51,7 @@ KINDS = {
         "title": "Crew",
         "singular": "crew member",
         "search": ["name", "role", "email", "phone"],
-        "columns": [("name", "Name"), ("role", "Role"), ("phone", "Phone"), ("email", "Email"),
+        "columns": [("name", "Name"), ("role", "Role"), ("skills", "Skills"), ("phone", "Phone"), ("email", "Email"),
                     ("day_rate", "Day rate"), ("active", "Active")],
         "fields": [
             Field("name", "Name", required=True),
@@ -63,7 +63,7 @@ KINDS = {
             Field("dietary", "Dietary restrictions", placeholder="For crew meal counts, e.g. vegetarian"),
             Field("w9_on_file", "W-9 on file (for contractor tax forms)", type="checkbox", default=0),
             Field("active", "Active (available for booking)", type="checkbox", default=1),
-            Field("notes", "Notes", type="textarea", placeholder="Skills, certifications, vehicle, availability..."),
+            Field("notes", "Notes", type="textarea", placeholder="Certifications, vehicle, anything else worth knowing"),
         ],
     },
     "vehicles": {
@@ -119,21 +119,47 @@ def index(kind):
     order = {"crew": "active DESC, name COLLATE NOCASE",
              "vehicles": "status = 'retired', name COLLATE NOCASE"}.get(kind, "name COLLATE NOCASE")
     rows = db.query(f"SELECT * FROM {spec['table']} {where} ORDER BY {order}", args)
-    return render_template("people/list.html", kind=kind, spec=spec, rows=rows, q=q)
+    extra = {}
+    if kind == "crew":
+        skills = crew.skills_by_crew()
+        skill = request.args.get("skill", "")
+        if skill:
+            rows = [r for r in rows if any(s["skill"] == skill for s in skills.get(r["id"], []))]
+        extra = {"skills": {k: ", ".join(s["skill"] for s in v) for k, v in skills.items()}, "skill": skill,
+                 "skill_options": crew.skill_list()}
+    return render_template("people/list.html", kind=kind, spec=spec, rows=rows, q=q, **extra)
+
+
+def _skill_form(row_id=None, rows=None, error=None):
+    """The skills-and-rates part of the crew form."""
+    if rows is None:
+        rows = [dict(s) for s in crew.skills_of(row_id)] if row_id else []
+    values = {r["skill"]: r for r in rows}
+    options = crew.skill_list()
+    return {"skill_options": options + [s for s in values if s not in options], "skill_values": values,
+            "skill_error": error}
 
 
 @bp.route(f"/{KIND_ROUTE}/new", methods=["GET", "POST"])
 def new(kind):
     spec = get_kind(kind)
     values, errors = {}, {}
+    extra = _skill_form() if kind == "crew" else {}
     if request.method == "POST":
         values, errors = forms.parse(spec["fields"], request.form)
+        if kind == "crew":
+            skill_rows, skill_error = crew.read_skills(request.form)
+            extra = _skill_form(rows=skill_rows, error=skill_error)
+            if skill_error:
+                errors["skills"] = skill_error
         if not errors:
             row_id = db.insert(spec["table"], values)
+            if kind == "crew":
+                crew.save_skills(row_id, skill_rows)
             flash(f"Added {values['name']}.", "ok")
             return redirect(url_for("people.detail", kind=kind, row_id=row_id))
     return render_template("people/form.html", kind=kind, spec=spec, row=None, values=values,
-                           errors=errors, grouped=forms.sections(spec["fields"]))
+                           errors=errors, grouped=forms.sections(spec["fields"]), **extra)
 
 
 @bp.route(f"/{KIND_ROUTE}/<int:row_id>/edit", methods=["GET", "POST"])
@@ -141,21 +167,29 @@ def edit(kind, row_id):
     spec = get_kind(kind)
     row = get_row(spec, row_id)
     values, errors = dict(row), {}
+    extra = _skill_form(row_id) if kind == "crew" else {}
     if request.method == "POST":
         values, errors = forms.parse(spec["fields"], request.form)
+        if kind == "crew":
+            skill_rows, skill_error = crew.read_skills(request.form)
+            extra = _skill_form(rows=skill_rows, error=skill_error)
+            if skill_error:
+                errors["skills"] = skill_error
         if not errors:
             db.update(spec["table"], row_id, values)
+            if kind == "crew":
+                crew.save_skills(row_id, skill_rows)
             flash("Saved.", "ok")
             return redirect(url_for("people.detail", kind=kind, row_id=row_id))
     return render_template("people/form.html", kind=kind, spec=spec, row=row, values=values,
-                           errors=errors, grouped=forms.sections(spec["fields"]))
+                           errors=errors, grouped=forms.sections(spec["fields"]), **extra)
 
 
 @bp.route(f"/{KIND_ROUTE}/<int:row_id>")
 def detail(kind, row_id):
     spec = get_kind(kind)
     row = get_row(spec, row_id)
-    events, invoices, assignments, pay, paperwork = [], [], [], None, {}
+    events, invoices, assignments, pay, paperwork, extra = [], [], [], None, {}, {}
     if kind == "vehicles":
         events = db.query(
             """SELECT e.*, ev.description, ev.departs, c.name AS driver_name FROM event_vehicles ev
@@ -174,9 +208,19 @@ def detail(kind, row_id):
     elif kind == "crew":
         assignments = services.crew_pay_rows("a.crew_id = ?", (row_id,))
         pay = {**services.crew_pay_summary(assignments), "by_year": services.paid_by_year(assignments)}
+        skills = crew.skills_of(row_id)
+        extra = {
+            "skills": [(s["skill"], *crew.rate_for(row, s["skill"], skills)) for s in skills],
+            "portal_url": crew.portal_url(row_id), "unavailable": crew.unavailable(row_id),
+            "offers": db.query(
+                """SELECT o.*, p.role, p.event_id, e.title, e.event_date FROM crew_offers o
+                   JOIN crew_openings p ON p.id = o.opening_id JOIN events e ON e.id = p.event_id
+                   WHERE o.crew_id = ? ORDER BY o.sent_at DESC LIMIT 15""", (row_id,)),
+            "offer_statuses": crew.OFFER_STATUSES,
+        }
     return render_template("people/detail.html", kind=kind, spec=spec, row=row, events=events,
                            invoices=invoices, assignments=assignments, pay=pay, paperwork=paperwork,
-                           today=util.today().isoformat())
+                           today=util.today().isoformat(), **extra)
 
 
 @bp.route(f"/{KIND_ROUTE}/<int:row_id>/delete", methods=["POST"])

@@ -88,6 +88,14 @@ def gear_availability(event):
     return result
 
 
+def free_quantities(start, end, exclude_event_id=None):
+    """Units of each active inventory item not reserved by other events
+    overlapping [start, end]. Returns {item_id: free}."""
+    booked = booked_quantities(start, end, exclude_event_id)
+    return {i["id"]: max(i["quantity"] - booked.get(i["id"], 0), 0)
+            for i in db.query("SELECT id, quantity FROM inventory_items WHERE status = 'active'")}
+
+
 def shortage_count(event):
     return sum(1 for a in gear_availability(event).values() if a["short"])
 
@@ -698,8 +706,24 @@ def _ics_fold(line):
 
 
 def event_ics(event, uid, summary, description="", start_time=None):
-    """A single-event iCalendar file. Times are "floating" (the viewer's local
-    time), which is right for crews working in the venue's time zone."""
+    """A single-event iCalendar file."""
+    return calendar_ics([vevent(event, uid, summary, description, start_time)])
+
+
+def calendar_ics(vevents, name=None):
+    """An iCalendar file of events from vevent(). Named calendars are for
+    subscribing: calendar apps check them again every few hours."""
+    head = ["BEGIN:VCALENDAR", "VERSION:2.0", f"PRODID:-//{db.get_setting('company_name')}//Worksheets//EN",
+            "CALSCALE:GREGORIAN", "METHOD:PUBLISH"]
+    if name:
+        head += [f"X-WR-CALNAME:{_ics_escape(name)}", "REFRESH-INTERVAL;VALUE=DURATION:PT4H", "X-PUBLISHED-TTL:PT4H"]
+    lines = head + [line for v in vevents for line in v] + ["END:VCALENDAR"]
+    return "\r\n".join(_ics_fold(line) for line in lines) + "\r\n"
+
+
+def vevent(event, uid, summary, description="", start_time=None):
+    """One calendar entry. Times are "floating" (the viewer's local time),
+    which is right for crews working in the venue's time zone."""
     _client, venue = event_context(event)
     start_date = util.parse_date(event["event_date"])
     end_date = util.parse_date(util.event_end(event))
@@ -718,13 +742,11 @@ def event_ics(event, uid, summary, description="", start_time=None):
         when = [f"DTSTART;VALUE=DATE:{start_date:%Y%m%d}",
                 f"DTEND;VALUE=DATE:{end_date + timedelta(days=1):%Y%m%d}"]
     location = ", ".join(p for p in [venue["name"] if venue else "", venue_address(venue)] if p)
-    lines = [
-        "BEGIN:VCALENDAR", "VERSION:2.0", f"PRODID:-//{db.get_setting('company_name')}//Worksheets//EN",
-        "CALSCALE:GREGORIAN", "METHOD:PUBLISH", "BEGIN:VEVENT",
+    return [
+        "BEGIN:VEVENT",
         f"UID:{uid}", f"DTSTAMP:{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}", *when,
         f"SUMMARY:{_ics_escape(summary)}",
         f"LOCATION:{_ics_escape(location)}",
         f"DESCRIPTION:{_ics_escape(description)}",
-        "END:VEVENT", "END:VCALENDAR",
+        "END:VEVENT",
     ]
-    return "\r\n".join(_ics_fold(line) for line in lines) + "\r\n"
