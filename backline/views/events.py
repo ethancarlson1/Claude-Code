@@ -3,7 +3,8 @@ from datetime import date, timedelta
 
 from flask import Blueprint, Response, abort, flash, g, jsonify, redirect, render_template, request, url_for
 
-from .. import db, files, forms, services, util
+from .. import crew as crew_mod
+from .. import db, files, forms, mailer, services, util
 from ..defaults import FILE_CATEGORIES, SERVICE_TYPES, VENUE_SETTINGS
 from ..forms import Field
 
@@ -400,6 +401,14 @@ def detail(event_id):
         ctx["crew_fields"] = CREW_FIELDS
         ctx["crew_pay"] = {r["id"]: r for r in services.crew_pay_rows("a.event_id = ?", (event_id,))}
         ctx["crew_options"] = db.query("SELECT * FROM crew WHERE active = 1 ORDER BY name COLLATE NOCASE")
+        ctx["openings"] = crew_mod.openings(event_id)
+        ctx["offer_messages"] = {
+            o["id"]: crew_mod.offer_message(crew_mod.offer_details(o["id"]), crew_mod.portal_url(o["crew_id"]))
+            for opening in ctx["openings"] for o in opening["offers"] if o["status"] == "sent"}
+        ctx["offer_statuses"] = crew_mod.OFFER_STATUSES
+        ctx["can_email"] = mailer.configured()
+        ctx["pay_text"] = crew_mod.pay_text
+        ctx["crew_emails"] = [a["email"] for a in crew if a["email"] and a["confirmed"]]
     if tab == "gear":
         booked = services.booked_quantities(event["event_date"], util.event_end(event), event_id)
         items = db.query("SELECT * FROM inventory_items WHERE status = 'active' ORDER BY category, name COLLATE NOCASE")
@@ -615,6 +624,7 @@ def confirm_crew(event_id, assignment_id):
 @bp.route("/events/<int:event_id>/crew/<int:assignment_id>/delete", methods=["POST"])
 def delete_crew(event_id, assignment_id):
     _get_assignment(event_id, assignment_id)
+    crew_mod.left_crew(assignment_id)
     db.execute("DELETE FROM event_crew WHERE id = ?", (assignment_id,))
     flash("Removed from crew.", "ok")
     return _back(event_id, "crew")

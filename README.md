@@ -44,8 +44,30 @@ The specs appear as quick-reference tiles on the event page and crew worksheets.
 - Up to two locations per event, e.g. a general session and a breakout room, two stages, or a ceremony and a reception.
 - A day-of timeline (load-in/delivery, setup complete, doors, show or program start and end, load-out/pickup) plus a free-form **run of show** that starts from the event type's template. Events can span multiple days.
 - The events list can be filtered by type.
-- A month calendar, a searchable event list, and a dashboard that flags what needs attention in the next 14 days: unconfirmed crew, missing gear lists, gear not pulled, open checklists, gear conflicts, gear not returned, unsigned contracts and overdue invoices.
+- A month calendar, a searchable event list, and a dashboard that flags what needs attention in the next 14 days: unconfirmed crew, open crew spots, missing gear lists, gear not pulled, open checklists, gear conflicts, gear not returned, unsigned contracts and overdue invoices.
 - "Add to calendar" (.ics) for the office and for each crew member.
+
+**Crew: skills, gig offers and each person's crew page**
+- **Skills and rates.** Each crew member's profile has the skills they can do (A1, A2, monitors, RF, backline, drum tech, stagehand, driver…), with their own rate for a skill when it differs from their usual day or hourly rate. Edit the skill list under **Settings → Crew & email**. The Crew list filters by skill.
+- **Offer a gig** from an event's Crew tab:
+  - Pick the skill, how many people, call time and pay: each person's own rate (day rates count every day of the event), or the same amount for everyone.
+  - It lists who has the skill and their rate, and flags anyone already working another event that day or who said they can't work.
+  - Tick the people to offer it to. The first to accept get the spots: accepting adds them to the crew, confirmed, with the pay from the offer. Once it's full, everyone else's offer closes.
+  - The Crew tab shows each offer as waiting, accepted (with any note), declined (with their reason), spot filled or withdrawn. **Offer to more people** can also raise the number needed, and **Close** ends an opening.
+  - If someone is taken off the crew, their spot opens up again.
+  - The dashboard flags events in the next 14 days with crew spots still open.
+- **Each person's crew page**, a private link (`/gigs/<key>`) with no password, made for phones. It shows:
+  - gig offers with **Accept** and **Decline** (plus an optional note to the office)
+  - upcoming gigs with call times, venue, pay and the full job sheet
+  - recent pay and whether it's been paid
+  - their skills and rates on file
+  - a calendar feed to subscribe to, so gigs and changes show up in their phone's calendar by themselves
+  - days they can't work, which the office also sees
+
+  It can be added to the home screen like an app. Send the link from their profile (Copy, Email it, Text it). **Make a new link** retires an old one that was shared by mistake.
+- **Reaching crew.**
+  - With email set up (see *Sending email* below), offers are emailed automatically, and **Send the crew an update** emails everyone confirmed, with a link to their job sheet. The office gets an email when someone answers.
+  - Without it, each offer has **Email** and **Text** buttons that open your own email or texting app with the message written in.
 
 **Crew worksheets**
 
@@ -163,6 +185,13 @@ Upload a rider, tech pack, stage plot, input list, schedule or email, and Claude
 
 Up to 10 files and 20 MB at a time. Older Office formats (.doc, .xls), Pages and Numbers files need saving as PDF first.
 
+**Gear from riders.** The AI also reads the gear a rider, input list or email asks for, one line per kind of item with the total quantity. It matches each line to your inventory:
+- the same item
+- a **substitute** that does the same job
+- **not in inventory**
+
+The import page previews this with how many units are free on the event's dates. Once the import is part of an event, the lines wait on its **Audio & backline** tab. For each line you choose the item, a sub-rental line, or **Leave out**, and the free count updates as you choose. **Add to gear list** adds them all at once. An item that's already on the list keeps the larger quantity.
+
 **How it works**
 1. The AI answers the same questions as the request form: client, date, venue, load-in, parking, timeline, contacts, head count, gear and so on.
    - Each answer comes with the line from the document it was read from.
@@ -191,6 +220,22 @@ These are estimates. Your Anthropic bill is the final word.
 - With Opus and Sonnet, if the model declines a document, Anthropic automatically retries it on another model (its "server-side fallback").
 - The files are sent to Anthropic to be read. By default, Anthropic doesn't use what's sent through its API to train its models.
 - AI import is off in the demo, which instead shows a sample import of an email about the gala.
+
+## Sending email
+
+The platform can email gig offers and crew updates itself, through any email account that allows SMTP. That includes the company's Google Workspace or Microsoft 365 mailbox, or an email service such as Postmark or SendGrid. Until it's set up, the same messages go out from your own email or texting app with one click.
+
+Add these to the server's environment (on Render: your service → **Environment**):
+
+| Variable | What to put |
+| --- | --- |
+| `BACKLINE_SMTP_HOST` | The mail server: `smtp.gmail.com` for Google, `smtp.office365.com` for Microsoft 365, or what your email service gives you |
+| `BACKLINE_SMTP_PORT` | Optional. `587` (the default) or `465` |
+| `BACKLINE_SMTP_USERNAME` | The address you send from, such as `crew@yourcompany.com` |
+| `BACKLINE_SMTP_PASSWORD` | For Google and Microsoft 365, an **app password** made in that account's security settings (your normal password won't work) |
+| `BACKLINE_MAIL_FROM` | Optional. The name and address crew see, such as `Chicago Sound and Backline <crew@yourcompany.com>` |
+
+Replies go to the company email under **Settings → Company & billing**. **Settings → Crew & email** shows whether email is set up and can send a test.
 
 ## QuickBooks Online
 
@@ -319,6 +364,8 @@ Render sets up the https certificate. Then link your website's "Request a quote"
 
 **7. Turn on Import with AI (optional).** Add your Anthropic API key as `ANTHROPIC_API_KEY` under the service's **Environment**, if you didn't when creating it, then click **Check connection** under **Settings → AI import**. See *Import with AI* above.
 
+**8. Let the platform email crew (optional).** Add the `BACKLINE_SMTP_*` variables under the service's **Environment** (see *Sending email*), then send a test from **Settings → Crew & email**.
+
 **Day to day**
 - **Backups:** Render snapshots the disk daily and keeps snapshots at least a week. Also download a backup from **Settings → Backup** now and then, and keep it somewhere safe.
 - **Forgotten passwords:** anyone signed in can set a new password for another user under **Settings → Users**. If nobody can sign in, open the service's **Shell** in Render and run `flask --app backline reset-password <username>`.
@@ -334,7 +381,8 @@ To show people what the platform does without paying for hosting or touching rea
 - A sign-in page with one **Explore the demo** button; no account needed.
 - They can click through everything and try it: create and edit events, build gear lists, tick checklists, open crew worksheets, send the request form, and turn a request into an inquiry.
 - Changes that would lock others out or reach outside services are turned off: users and passwords, company details and logo, QuickBooks, AI import, restoring backups, and switching the request form off.
-- A sample AI import (an email about the gala) shows what the AI finds, and can be added to its event.
+- A sample AI import (an email about the gala) shows what the AI finds, including its gear list, and can be added to its event.
+- Crew have skills and rates, and the festival has a stagehand opening: one person has accepted and one hasn't answered. Open a crew member's page from their profile to try accepting an offer.
 - A banner on every page says it's a demo, with a **Start over** button that puts the sample data back.
 - The demo is hidden from search engines, and uploads are limited to 5 MB.
 
@@ -385,6 +433,7 @@ BACKLINE_SECRET_KEY=... BACKLINE_DATABASE=/srv/backline/backline.sqlite3 BACKLIN
 | `BACKLINE_MAX_RESTORE_MB` | Largest backup that can be restored, in MB. Default: 500. |
 | `BACKLINE_QBO_CLIENT_ID`, `BACKLINE_QBO_CLIENT_SECRET` | Optional. Your Intuit app's keys, instead of entering them under Settings → QuickBooks. |
 | `ANTHROPIC_API_KEY` | Optional. Turns on Import with AI (see *Import with AI*). |
+| `BACKLINE_SMTP_HOST`, `BACKLINE_SMTP_PORT`, `BACKLINE_SMTP_USERNAME`, `BACKLINE_SMTP_PASSWORD`, `BACKLINE_MAIL_FROM` | Optional. Lets the platform email crew (see *Sending email*). |
 
 **Backups:** **Settings → Backup → Download backup** saves the database and every uploaded file in one .zip. The database also holds the QuickBooks sign-in when connected, so keep backups private.
 
@@ -435,12 +484,15 @@ backline/
   quickbooks.py      QuickBooks Online: sign-in, sending invoices and payments, bringing payments back
   intake.py          the event request form: questions, reading answers, turning a request into an event
   ai_import.py       Import with AI: reading files, asking Claude, checking its answers, cost
+  crew.py            crew skills and rates, days off, gig offers, the crew page's calendar feed
+  mailer.py          sending email through the company's mail account (SMTP)
   backup.py          backup downloads and restoring onto an empty platform
   demo.py            demo mode for the free showcase site
   seed.py            Chicago demo data
   views/             dashboard, events (crew/gear/checklists/chat/calendar), inventory,
                      people (clients/venues/crew), contracts, invoices, crewpay, settings, quickbooks,
                      requests (the office inbox), imports (Import with AI), intake (the public request form), backups,
+                     offers (crew gig offers, Settings → Crew & email), crew_portal (each crew member's page),
                      public (crew worksheets, contract signing, client invoices)
   templates/, static/ (static/brand/ holds the logo and icons)
 render.yaml          Render Blueprint for the live site
@@ -449,7 +501,8 @@ tests/
 
 ## Known limits / ideas for next steps
 
-- Email goes through `mailto:` links. Sending automatically (SMTP, Postmark, etc.), texting crew their worksheet link, and push notifications for new chat messages would be natural additions.
+- Email to crew goes out automatically once SMTP is set up; texts still go from your own phone with one tap. Automatic texts (through a service like Twilio, which costs a little per message and needs a registered business number) and phone push notifications are possible next steps.
+- The crew page works like an app from the home screen. A separate App Store / Google Play app isn't needed for what it does, but the crew page could be the starting point for one later.
 - Online payments go through QuickBooks Payments when QuickBooks is connected. Paying crew through Zelle, Venmo or similar is on hold.
 - The e-signature is a typed name plus an agreement checkbox, with a time and IP audit record. Check that this meets Illinois requirements. The default contract and crew policy text is a starting point, not legal advice.
 - Possible additions: a per-crew iCal feed of all their calls, gear "kits", and barcode scanning for check-in and check-out.

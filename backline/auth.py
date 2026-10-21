@@ -31,7 +31,8 @@ BIG_UPLOADS = {"backups.restore": int(os.environ.get("BACKLINE_MAX_RESTORE_MB", 
 
 # Endpoints reachable without logging in. Public pages are protected by
 # unguessable per-record keys instead.
-PUBLIC_BLUEPRINTS = {"auth", "public", "intake"}  # intake: the public event request form
+# intake: the public event request form; crew_portal: each crew member's own page (/gigs/<key>)
+PUBLIC_BLUEPRINTS = {"auth", "public", "intake", "crew_portal"}
 
 
 def csrf_token():

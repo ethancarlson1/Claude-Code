@@ -70,6 +70,7 @@ def test_visitors_can_try_the_real_features(visitor, demo_app):
     ("/settings/backup/restore", {"confirm": "1"}),
     ("/requests/import", {"pasted": "Party on June 5"}),
     ("/settings/ai", {"model": "claude-haiku-5-5"}),
+    ("/settings/crew", {"skills": "Only one"}),
 ])
 def test_some_changes_are_turned_off(visitor, demo_app, url, data):
     before = {t: _count(demo_app, t) for t in ("users", "settings")}
@@ -96,6 +97,22 @@ def test_ai_import_is_shown_with_a_sample(visitor, demo_app):
     assert b"Added request" in resp.data  # visitors can try the rest of the flow
     event = query(demo_app, "SELECT * FROM events WHERE id = ?", (sample["suggested_event_id"],), one=True)
     assert event["load_in_time"] == "13:00" and "Crew meals provided at 5 PM" in event["notes"]
+
+
+def test_crew_offers_and_crew_pages_work_in_the_demo(visitor, demo_app):
+    jordan = query(demo_app, "SELECT id FROM crew WHERE name = 'Jordan Pike'", one=True)["id"]
+    page = visitor.get(f"/crew/{jordan}").data.decode()
+    assert "Backline tech" in page and "Their crew page" in page
+    key = query(demo_app, "SELECT portal_key FROM crew WHERE id = ?", (jordan,), one=True)["portal_key"]
+    crew_page = demo_app.test_client()  # crew don't sign in
+    page = crew_page.get(f"/gigs/{key}").data.decode()
+    assert "Lakefront Harvest Festival" in page and "Stagehand" in page and "rain gear" in page
+    offer = query(demo_app, "SELECT id FROM crew_offers WHERE crew_id = ? AND status = 'sent'", (jordan,), one=True)
+    resp = crew_page.post(f"/gigs/{key}/offers/{offer['id']}", data={"action": "accept"}, follow_redirects=True)
+    assert b"You&#39;re on the crew" in resp.data
+    assert query(demo_app, "SELECT status FROM crew_openings", one=True)["status"] == "filled"
+    fest = query(demo_app, "SELECT event_id FROM crew_openings", one=True)["event_id"]
+    assert "2 of 2 filled" in visitor.get(f"/events/{fest}?tab=crew").data.decode()
 
 
 def test_start_over_puts_the_sample_data_back(visitor, demo_app):

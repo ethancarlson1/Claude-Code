@@ -7,7 +7,7 @@ import json
 from datetime import datetime, timedelta
 from email.message import EmailMessage
 
-from . import db, files, intake, services, util
+from . import crew, db, files, intake, services, util
 
 INVENTORY = [
     # name, category, make, model, qty, rate/day, replacement value, location
@@ -47,6 +47,17 @@ INVENTORY = [
     ("Motion Labs 100A distro", "Power & Distro", "Motion Labs", "100A 3-phase", 1, 150, 3500, "Power cage"),
     ("Drum riser 8x8", "Staging", "StageRight", "8x8x16in", 2, 75, 1200, "Staging bay"),
 ]
+
+# Skills each crew member has: (skill, their day rate for it, hourly rate) when it
+# differs from their usual rates.
+CREW_SKILLS = {
+    "Dana Kowalski": [("Crew chief / production manager", None, None), ("A1 / FOH engineer", 425, None)],
+    "Maya Ortiz": [("A1 / FOH engineer", None, None), ("Monitor engineer", 425, None), ("RF / wireless tech", None, None)],
+    "Chris Bell": [("A2 / mic tech", None, None), ("Monitor engineer", 375, None), ("RF / wireless tech", None, None)],
+    "Jordan Pike": [("Backline tech", None, None), ("Driver", 250, None), ("Stagehand", None, 28)],
+    "Taylor Nguyen": [("Drum tech", None, None), ("Backline tech", None, None)],
+    "Sam Reyes": [("Stagehand", None, None), ("Driver", None, 30)],
+}
 
 CREW = [
     # name, role, email, phone, day rate, hourly rate, dietary
@@ -361,8 +372,10 @@ def seed():
                "notes = 'Channel 2 crackle; at the amp tech since last week.' WHERE name = 'Vox AC30'")
 
     for name, role, email, phone, day, hourly, dietary in CREW:
-        db.insert("crew", {"name": name, "role": role, "email": email, "phone": phone, "day_rate": day,
-                           "hourly_rate": hourly, "dietary": dietary, "w9_on_file": 0 if name == "Sam Reyes" else 1})
+        crew_id = db.insert("crew", {"name": name, "role": role, "email": email, "phone": phone, "day_rate": day,
+                                     "hourly_rate": hourly, "dietary": dietary,
+                                     "w9_on_file": 0 if name == "Sam Reyes" else 1})
+        crew.save_skills(crew_id, [{"skill": s, "day_rate": d, "hourly_rate": h} for s, d, h in CREW_SKILLS[name]])
     for name, company, email, phone in CLIENTS:
         db.insert("clients", {"name": name, "company": company, "email": email, "phone": phone})
     for v in VENUES:
@@ -525,6 +538,7 @@ def seed():
                      ("Drum riser 8x8", 2), ("Motion Labs 100A distro", 1)])
     _add_crew(fest, "Chris Bell", "A2 / Monitors", "08:00")
     _add_crew(fest, "Taylor Nguyen", "Drum Tech", "08:00")
+    _seed_offers(fest, day)
     _vehicle(fest, "Box Truck 1", driver="Chris Bell", departs="07:00")
     _vehicle(fest, "Utility Trailer", notes="Drum risers and distro")
     _doc(fest, "Lakefront Harvest site map.pdf", _pdf("Lakefront Harvest Festival - Site Map", [
@@ -736,3 +750,17 @@ Events Coordinator, Lakeview Youth Arts Fund
                                        "size": size})
     db.insert("ai_usage", {"created_at": created, "model": "claude-opus-5-5", "input_tokens": 4100,
                            "output_tokens": 1650, "cost": 0.05, "outcome": "ok", "request_id": request_id})
+
+
+def _seed_offers(fest, day):
+    """The festival still needs stagehands: one has accepted, one hasn't answered.
+    Taylor is away the weekend before."""
+    opening = db.insert("crew_openings", {
+        "event_id": fest, "skill": "Stagehand", "role": "Stagehand", "needed": 2, "call_time": "07:30",
+        "pay_type": "own", "hours": 10, "notes": "Three long days outside: bring rain gear and work gloves.",
+        "created_at": util.now_iso()})
+    crew.send_offers(opening, [_crew_id("Sam Reyes"), _crew_id("Jordan Pike")])
+    sam = db.scalar("SELECT id FROM crew_offers WHERE opening_id = ? AND crew_id = ?", (opening, _crew_id("Sam Reyes")))
+    crew.answer(sam, True, "Count me in for all three days.")
+    db.insert("crew_unavailable", {"crew_id": _crew_id("Taylor Nguyen"), "start_date": day(19), "end_date": day(21),
+                                   "note": "Out of town", "added_by": "crew", "created_at": util.now_iso()})

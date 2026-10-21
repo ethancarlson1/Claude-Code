@@ -54,8 +54,32 @@ CREATE TABLE IF NOT EXISTS crew (
     w9_on_file INTEGER NOT NULL DEFAULT 0,       -- for contractor tax forms
     notes TEXT,
     active INTEGER NOT NULL DEFAULT 1,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    portal_key TEXT                              -- their personal crew page link (unique; see crew.py)
 );
+
+-- What each crew member can do, with their rate for it when it differs from
+-- their usual day/hourly rate. Skill names come from Settings → Crew.
+CREATE TABLE IF NOT EXISTS crew_skills (
+    id INTEGER PRIMARY KEY,
+    crew_id INTEGER NOT NULL REFERENCES crew(id) ON DELETE CASCADE,
+    skill TEXT NOT NULL,
+    day_rate REAL,
+    hourly_rate REAL,
+    UNIQUE (crew_id, skill)
+);
+
+-- Days a crew member can't work, from their crew page or the office.
+CREATE TABLE IF NOT EXISTS crew_unavailable (
+    id INTEGER PRIMARY KEY,
+    crew_id INTEGER NOT NULL REFERENCES crew(id) ON DELETE CASCADE,
+    start_date TEXT NOT NULL,
+    end_date TEXT NOT NULL,
+    note TEXT,
+    added_by TEXT,                               -- crew | office
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_crew_unavailable ON crew_unavailable(crew_id, end_date);
 
 CREATE TABLE IF NOT EXISTS inventory_items (
     id INTEGER PRIMARY KEY,
@@ -157,6 +181,41 @@ CREATE TABLE IF NOT EXISTS event_crew (
     paid_method TEXT,
     paid_reference TEXT
 );
+
+-- Crew an event still needs: offered to several people, filled by the first
+-- to accept. Accepting creates the event_crew assignment.
+CREATE TABLE IF NOT EXISTS crew_openings (
+    id INTEGER PRIMARY KEY,
+    event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    skill TEXT,                                  -- who it's for (Settings → Crew)
+    role TEXT NOT NULL,                          -- what they'll do, as crew see it
+    needed INTEGER NOT NULL DEFAULT 1,
+    call_time TEXT,
+    pay_type TEXT NOT NULL DEFAULT 'own',        -- own (each person's rate for the skill) | flat | hourly
+    pay_rate REAL,
+    hours REAL,                                  -- estimated hours
+    notes TEXT,                                  -- shown to crew with the offer
+    status TEXT NOT NULL DEFAULT 'open',         -- open | filled | cancelled
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_crew_openings_event ON crew_openings(event_id);
+
+CREATE TABLE IF NOT EXISTS crew_offers (
+    id INTEGER PRIMARY KEY,
+    opening_id INTEGER NOT NULL REFERENCES crew_openings(id) ON DELETE CASCADE,
+    crew_id INTEGER NOT NULL REFERENCES crew(id) ON DELETE CASCADE,
+    status TEXT NOT NULL DEFAULT 'sent',         -- sent | accepted | declined | filled | withdrawn
+    pay_type TEXT NOT NULL DEFAULT 'flat',       -- what this person is offered: flat | hourly
+    pay_rate REAL,
+    hours REAL,
+    assignment_id INTEGER REFERENCES event_crew(id) ON DELETE SET NULL,
+    note TEXT,                                   -- from the crew member, with their answer
+    sent_at TEXT NOT NULL,
+    emailed_at TEXT,
+    responded_at TEXT,
+    UNIQUE (opening_id, crew_id)
+);
+CREATE INDEX IF NOT EXISTS idx_crew_offers_crew ON crew_offers(crew_id, status);
 
 -- Audio / backline needs for an event. item_id is NULL for sub-rentals or
 -- anything not tracked in inventory. pulled/loaded/returned drive the

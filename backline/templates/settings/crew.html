@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf %}
+{% block title %}Crew &amp; email{% endblock %}
+{% block heading %}<h1>Settings</h1>{% endblock %}
+{% block content %}
+{% include "settings/_tabs.html" %}
+<div class="stack" style="max-width:820px">
+  <section class="card">
+    <h2>Crew skills</h2>
+    <p class="small">The skills you can tick on each crew member's profile, with their rate for each, and pick when you offer a gig. One per line.</p>
+    <form method="post">
+      {{ csrf() }}
+      <div class="field"><label for="skills">Skills</label><textarea id="skills" name="skills" rows="{{ [skills|length + 2, 8]|max }}">{{ skills|join('\n') }}</textarea></div>
+      {% if counts %}<p class="help">In use: {% for skill, n in counts|dictsort %}{{ skill }} ({{ n }}){{ ', ' if not loop.last }}{% endfor %}. Removing a skill from this list keeps it on the people who have it.</p>{% endif %}
+      <div class="form-actions"><button class="btn btn-primary" type="submit">Save skills</button></div>
+    </form>
+  </section>
+
+  <section class="card" id="email">
+    <h2>Sending email</h2>
+    {% if email_ready %}
+      <p><span class="badge badge-ok">Set up</span> Offers and crew updates are emailed from <strong>{{ sender }}</strong> through {{ mail.host }}.{% if me %} Replies go to {{ me }}.{% endif %}</p>
+      <form method="post" class="form-row" style="align-items:flex-end">
+        {{ csrf() }}<input type="hidden" name="action" value="test">
+        <div class="field grow"><label for="test-to">Send a test email to</label><input id="test-to" name="to" type="email" value="{{ me }}" required></div>
+        <button class="btn" type="submit">Send test</button>
+      </form>
+    {% else %}
+      <p><span class="badge badge-muted">Not set up</span> Offers and updates go out from your own email or texting app instead: the Crew tab has an Email and a Text button for each person, with the message written in.</p>
+      <p class="small">To have the platform email crew itself, give it an email account to send from. On Render, add these under your service → <strong>Environment</strong>:</p>
+      <table class="small"><tbody>
+        <tr><td><code>BACKLINE_SMTP_HOST</code></td><td>The mail server. Google Workspace or Gmail: <code>smtp.gmail.com</code>. Microsoft 365: <code>smtp.office365.com</code>.</td></tr>
+        <tr><td><code>BACKLINE_SMTP_PORT</code></td><td><code>587</code> (the usual one; leave it out to use 587)</td></tr>
+        <tr><td><code>BACKLINE_SMTP_USERNAME</code></td><td>The email address you send from, such as <code>crew@yourcompany.com</code></td></tr>
+        <tr><td><code>BACKLINE_SMTP_PASSWORD</code></td><td>For Gmail, Google Workspace and Microsoft 365, an <em>app password</em> made in that account's security settings, not your normal password</td></tr>
+        <tr><td><code>BACKLINE_MAIL_FROM</code></td><td>Optional: the name and address crew see, such as <code>Chicago Sound and Backline &lt;crew@yourcompany.com&gt;</code></td></tr>
+      </tbody></table>
+      <p class="help">Email services such as Postmark or SendGrid work the same way, with the server and login they give you. Replies go to the company email under Company &amp; billing.</p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

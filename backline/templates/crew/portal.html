@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf, badge, copy_link %}
+{% block title %}Your gigs{% endblock %}
+{% block body_class %}intake-page crew-page{% endblock %}
+{% block head %}
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#0070b8">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Gigs">
+  <link rel="manifest" href="{{ url_for('crew_portal.manifest', key=key) }}">
+{% endblock %}
+{% block shell %}
+<main class="intake crew-portal">
+  <header class="intake-head">
+    <div class="auth-logo"><img src="{{ logo_url }}" alt="{{ settings.company_name }}"></div>
+    <h1>Hi, {{ member.name.split()[0] }}</h1>
+    <p>Your gigs with {{ settings.company_name }}. This page is private to you: don't share the link.</p>
+  </header>
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, message in messages %}<div class="flash flash-{{ category }}">{{ message }}</div>{% endfor %}
+  {% endwith %}
+
+  <section class="card" id="offers">
+    <h2>Gig offers{% if offers %} <span class="count-pill">{{ offers|length }}</span>{% endif %}</h2>
+    {% for o in offers %}{% set r = o.row %}
+    <div class="offer">
+      <div class="offer-head">
+        <strong>{{ r.role }}</strong> · {{ r.title }}
+        <div class="small">{{ r.event_date|fdate }}{% if r.end_date and r.end_date != r.event_date %} to {{ r.end_date|fdate }}{% endif %}{% if r.call_time %} · call {{ r.call_time|ftime }}{% endif %}</div>
+        <div class="small muted">{{ [r.venue_name, r.venue_address, r.venue_city]|select|join(', ') or 'Venue to be confirmed' }}</div>
+      </div>
+      <div class="offer-pay">{{ o.pay }}</div>
+      {% if r.opening_notes %}<p class="small pre">{{ r.opening_notes }}</p>{% endif %}
+      {% for reason in o.busy %}<div class="flash flash-warn small">Heads up: {{ reason }} that day.</div>{% endfor %}
+      <form method="post" action="{{ url_for('crew_portal.answer', key=key, offer_id=r.id) }}">
+        {{ csrf() }}
+        <input name="note" placeholder="Note for the office (optional)" aria-label="Note for the office" maxlength="500">
+        <div class="form-actions">
+          <button class="btn btn-primary" type="submit" name="action" value="accept">Accept</button>
+          <button class="btn" type="submit" name="action" value="decline">Decline</button>
+        </div>
+      </form>
+      {% if r.needed > 1 %}<p class="help">{{ r.needed }} spots. They go to whoever accepts first.</p>{% else %}<p class="help">It goes to whoever accepts first.</p>{% endif %}
+    </div>
+    {% else %}
+    <p class="muted">No offers waiting. New ones show up here{% if member.email %}, and we'll email you{% endif %}.</p>
+    {% endfor %}
+  </section>
+
+  <section class="card" id="gigs">
+    <h2>Your upcoming gigs</h2>
+    {% for gig in gigs %}{% set a = gig.row %}{% set e = gig.event %}
+    <div class="offer">
+      <div class="offer-head">
+        <strong>{{ e.title }}</strong>{% if a.role %} · {{ a.role }}{% endif %}
+        <div class="small">{{ e.event_date|fdate }}{% if a.call_time %} · call {{ a.call_time|ftime }}{% endif %}</div>
+        {% if gig.venue %}<div class="small muted">{{ [gig.venue.name, gig.venue.address, gig.venue.city]|select|join(', ') }}</div>{% endif %}
+      </div>
+      <div class="offer-pay">{{ a.due|money }}{% if a.pay_type == 'hourly' %} <span class="small muted">({{ pay_text('hourly', a.pay_rate, a.hours) }})</span>{% endif %}</div>
+      <p><a class="btn btn-small" href="{{ gig.link }}">Job sheet</a> <span class="small muted">Times, run of show, contacts, documents and the crew chat.</span></p>
+    </div>
+    {% else %}
+    <p class="muted">Nothing booked yet.</p>
+    {% endfor %}
+  </section>
+
+  <section class="card" id="calendar">
+    <h2>Put your gigs in your phone's calendar</h2>
+    <p class="small">Subscribe once and new gigs and changes appear in your calendar app by themselves (it checks every few hours).</p>
+    <p><a class="btn" href="{{ webcal }}">Subscribe on iPhone or Mac</a></p>
+    <p class="small">Google Calendar: on a computer, go to <strong>Other calendars → + → From URL</strong> and paste this link:</p>
+    {{ copy_link(calendar) }}
+  </section>
+
+  <section class="card" id="availability">
+    <h2>Days you can't work</h2>
+    {% if unavailable %}
+    <ul class="plain-list">
+      {% for u in unavailable %}
+      <li>{{ u.start_date|fdate('short') }}{% if u.end_date != u.start_date %} – {{ u.end_date|fdate('short') }}{% endif %}{% if u.note %} <span class="muted">· {{ u.note }}</span>{% endif %}
+        <form method="post" action="{{ url_for('crew_portal.delete_unavailable', key=key, row_id=u.id) }}" class="inline">{{ csrf() }}<button class="link small" type="submit">Remove</button></form></li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    <form method="post" action="{{ url_for('crew_portal.add_unavailable', key=key) }}" class="form-row" style="align-items:flex-end">
+      {{ csrf() }}
+      <div class="field"><label for="u-start">From</label><input id="u-start" type="date" name="start_date" required min="{{ today().isoformat() }}"></div>
+      <div class="field"><label for="u-end">To</label><input id="u-end" type="date" name="end_date" min="{{ today().isoformat() }}"></div>
+      <div class="field grow"><label for="u-note">Note</label><input id="u-note" name="note" placeholder="Optional, e.g. out of town"></div>
+      <button class="btn" type="submit">Add</button>
+    </form>
+    <p class="help">We won't offer you gigs on these days.</p>
+  </section>
+
+  {% if pay %}
+  <section class="card" id="pay">
+    <h2>Recent pay</h2>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Gig</th><th class="num">Amount</th><th>Status</th></tr></thead>
+      <tbody>
+      {% for p in pay %}
+        <tr><td>{{ p.event_date|fdate('short') }} · {{ p.title }}</td><td class="num">{{ p.due|money }}</td>
+          <td>{% if p.paid_on %}Paid {{ p.paid_on|fdate('short') }}{% if p.paid_method %} · {{ p.paid_method }}{% endif %}{% else %}{{ badge(p.pay_status) }}{% endif %}</td></tr>
+      {% endfor %}
+      </tbody></table></div>
+  </section>
+  {% endif %}
+
+  <section class="card" id="rates">
+    <h2>Your skills and rates on file</h2>
+    {% if rates %}
+    <dl class="facts">
+      {% for skill, day, hourly in rates %}<dt>{{ skill }}</dt><dd>{% if day is not none %}{{ day|money }}/day{% endif %}{% if day is not none and hourly is not none %} · {% endif %}{% if hourly is not none %}{{ hourly|money }}/hr{% endif %}{% if day is none and hourly is none %}<span class="muted">No rate on file</span>{% endif %}</dd>{% endfor %}
+    </dl>
+    {% else %}
+    <p class="small">{% if member.day_rate is not none %}Day rate {{ member.day_rate|money }}. {% endif %}{% if member.hourly_rate is not none %}Hourly {{ member.hourly_rate|money }}.{% endif %}</p>
+    {% endif %}
+    <p class="help">Something wrong or out of date?{% if settings.company_email %} <a href="mailto:{{ settings.company_email }}">Email the office</a>{% endif %}{% if settings.company_phone %} or call {{ settings.company_phone }}{% endif %}.</p>
+  </section>
+
+  <p class="help" style="text-align:center">Tip: add this page to your home screen to open it like an app. iPhone: Share → Add to Home Screen. Android: menu ⋮ → Add to Home screen.</p>
+</main>
+{% endblock %}

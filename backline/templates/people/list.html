@@ -6,6 +6,7 @@
 {% block content %}
 <form class="filters" method="get">
   <input type="search" name="q" value="{{ q }}" placeholder="Search {{ spec.title|lower }}">
+  {% if kind == 'crew' %}<select name="skill" aria-label="Skill"><option value="">Any skill</option>{% for s in skill_options %}<option {% if s == skill %}selected{% endif %}>{{ s }}</option>{% endfor %}</select>{% endif %}
   <button class="btn" type="submit">Search</button>
 </form>
 <div class="card">
@@ -23,6 +24,7 @@
         {% elif col.endswith('rate') %}<td class="num">{{ r[col]|money if r[col] else '—' }}</td>
         {% elif col == 'active' %}<td>{{ 'Yes' if r[col] else 'No' }}</td>
         {% elif col == 'status' %}<td>{{ badge(r[col]) }}</td>
+        {% elif col == 'skills' %}<td class="small">{{ skills.get(r.id) or '—' }}</td>
         {% else %}<td>{{ r[col] or '—' }}</td>{% endif %}
       {% endfor %}
       </tr>

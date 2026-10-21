@@ -33,7 +33,7 @@ MIGRATIONS = {
         ("monitor_mixes", "INTEGER"),
         ("playback_feeds", "TEXT"),
     ],
-    "crew": [("dietary", "TEXT"), ("w9_on_file", "INTEGER NOT NULL DEFAULT 0")],
+    "crew": [("dietary", "TEXT"), ("w9_on_file", "INTEGER NOT NULL DEFAULT 0"), ("portal_key", "TEXT")],
     "event_crew": [
         ("actual_hours", "REAL"),
         ("final_amount", "REAL"),
@@ -158,7 +158,8 @@ def _migrate(conn):
         "UPDATE settings SET value = ? WHERE key = 'company_name' AND value = ?",
         (COMPANY_NAME, _OLD_DEFAULT_COMPANY_NAME),
     )
-    # Here rather than schema.sql: older databases only get the column above.
+    # Here rather than schema.sql: older databases only get these columns above.
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_crew_portal_key ON crew(portal_key) WHERE portal_key IS NOT NULL")
     conn.execute(
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_qbo ON payments(invoice_id, qbo_payment_id) "
         "WHERE qbo_payment_id IS NOT NULL"

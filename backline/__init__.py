@@ -67,6 +67,7 @@ def create_app(test_config=None):
     from .views import (
         backups,
         contracts,
+        crew_portal,
         crewpay,
         dashboard,
         events,
@@ -74,6 +75,7 @@ def create_app(test_config=None):
         intake,
         inventory,
         invoices,
+        offers,
         people,
         public,
         quickbooks,
@@ -83,7 +85,7 @@ def create_app(test_config=None):
 
     auth.init_app(app)
     for module in (dashboard, events, inventory, people, contracts, invoices, crewpay, public, settings, quickbooks,
-                   intake, requests, imports, backups):
+                   intake, requests, imports, backups, offers, crew_portal):
         app.register_blueprint(module.bp)
 
     with app.app_context():

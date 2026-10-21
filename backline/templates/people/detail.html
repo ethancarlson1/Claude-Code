@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import badge, delete_button %}
+{% from "_macros.html" import badge, delete_button, copy_link, csrf %}
 {% block title %}{{ row.name }}{% endblock %}
 {% block heading %}<h1>{{ row.name }}</h1><div class="sub">{{ spec.singular|capitalize }}{% if kind == 'crew' and row.role %} · {{ row.role }}{% endif %}{% if kind == 'clients' and row.company %} · {{ row.company }}{% endif %}</div>{% endblock %}
 {% block actions %}
@@ -77,6 +77,7 @@
     </section>
     {% endif %}
   </div>
+  <div class="stack">
   <section class="card">
     <h2>Details</h2>
     <dl class="facts">
@@ -91,5 +92,53 @@
     </dl>
     <div style="margin-top:1rem">{{ delete_button(url_for('people.delete', kind=kind, row_id=row.id), row.name ~ (' and their event assignments' if kind == 'crew' else '')) }}</div>
   </section>
+  {% if kind == 'crew' %}
+  <section class="card" id="skills">
+    <div class="card-head"><h2>Skills &amp; rates</h2><a class="small" href="{{ url_for('people.edit', kind=kind, row_id=row.id) }}#skills">Edit</a></div>
+    {% if skills %}
+    <dl class="facts">
+      {% for skill, day, hourly in skills %}<dt>{{ skill }}</dt><dd>{% if day is not none %}{{ day|money }}/day{% endif %}{% if day is not none and hourly is not none %} · {% endif %}{% if hourly is not none %}{{ hourly|money }}/hr{% endif %}{% if day is none and hourly is none %}<span class="muted">No rate</span>{% endif %}</dd>{% endfor %}
+    </dl>
+    {% else %}<p class="muted small">No skills ticked yet, so they won't show up first when you offer a gig.</p>{% endif %}
+  </section>
+  <section class="card" id="portal">
+    <h2>Their crew page</h2>
+    <p class="small">A private page where {{ row.name.split()[0] }} sees gig offers (and accepts or declines), upcoming gigs, job sheets, pay, and adds days they can't work. It also has a calendar feed for their phone.</p>
+    {{ copy_link(portal_url) }}
+    <p class="form-row" style="margin-top:.5rem">
+      <a class="btn btn-small" href="{{ portal_url }}" target="_blank" rel="noopener">Open</a>
+      {% set intro = 'Hi ' ~ row.name.split()[0] ~ ', here is your crew page with ' ~ company_name ~ ': gig offers, your schedule, job sheets and pay, plus a calendar you can subscribe to. Keep it private. ' ~ portal_url %}
+      {% if row.email %}<a class="btn btn-small" href="{{ mailto(row.email, 'Your crew page with ' ~ company_name, intro) }}">Email it</a>{% endif %}
+      {% if row.phone %}<a class="btn btn-small" href="{{ sms_link(row.phone, intro) }}">Text it</a>{% endif %}
+    </p>
+    <form method="post" action="{{ url_for('offers.new_link', crew_id=row.id) }}" data-confirm="Make a new link? The old one stops working.">{{ csrf() }}<button class="link small" type="submit">Make a new link (if the old one was shared by mistake)</button></form>
+  </section>
+  <section class="card" id="availability">
+    <h2>Can't work</h2>
+    {% if unavailable %}
+    <ul class="plain-list">
+      {% for u in unavailable %}<li>{{ u.start_date|fdate('short') }}{% if u.end_date != u.start_date %} – {{ u.end_date|fdate('short') }}{% endif %}{% if u.note %} <span class="muted">· {{ u.note }}</span>{% endif %} <span class="small muted">({{ 'they added' if u.added_by == 'crew' else 'office' }})</span>
+        <form method="post" action="{{ url_for('offers.delete_unavailable', crew_id=row.id, row_id=u.id) }}" class="inline">{{ csrf() }}<button class="link small" type="submit">Remove</button></form></li>{% endfor %}
+    </ul>
+    {% else %}<p class="muted small">No days marked.</p>{% endif %}
+    <form method="post" action="{{ url_for('offers.add_unavailable', crew_id=row.id) }}" class="form-row" style="align-items:flex-end;margin-top:.5rem">
+      {{ csrf() }}
+      <div class="field"><label for="u-start">From</label><input id="u-start" type="date" name="start_date" required></div>
+      <div class="field"><label for="u-end">To</label><input id="u-end" type="date" name="end_date"></div>
+      <div class="field grow"><label for="u-note">Note</label><input id="u-note" name="note"></div>
+      <button class="btn btn-small" type="submit">Add</button>
+    </form>
+  </section>
+  {% if offers %}
+  <section class="card">
+    <h2>Recent gig offers</h2>
+    <div class="table-wrap"><table><tbody>
+      {% for o in offers %}<tr><td class="nowrap small">{{ o.event_date|fdate('short') }}</td><td><a href="{{ url_for('events.detail', event_id=o.event_id, tab='crew') }}">{{ o.title }}</a><div class="small muted">{{ o.role }}</div></td>
+        <td>{{ badge(o.status, offer_statuses[o.status]) }}{% if o.note %}<div class="small muted">“{{ o.note }}”</div>{% endif %}</td></tr>{% endfor %}
+    </tbody></table></div>
+  </section>
+  {% endif %}
+  {% endif %}
+  </div>
 </div>
 {% endblock %}

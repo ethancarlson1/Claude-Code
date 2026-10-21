@@ -272,6 +272,34 @@
     });
   }
 
+  // Offer a gig: show who has the chosen skill, and their rate for it.
+  var offerForm = document.querySelector("form[data-offer-form]");
+  if (offerForm) {
+    var skillSelect = offerForm.querySelector("[data-skill-select]");
+    var fixedSkill = offerForm.querySelector("input[type=hidden][name=skill]");
+    var showAll = offerForm.querySelector("[data-show-all]");
+    var roleInput = offerForm.querySelector("[data-role-input]");
+    var filterCrew = function () {
+      var skill = skillSelect ? skillSelect.value : (fixedSkill ? fixedSkill.value : "");
+      offerForm.querySelectorAll("tr[data-candidate]").forEach(function (tr) {
+        var skills = JSON.parse(tr.getAttribute("data-skills"));
+        var rates = JSON.parse(tr.getAttribute("data-rates"));
+        tr.hidden = !!skill && skills.indexOf(skill) === -1 && !(showAll && showAll.checked);
+        var box = tr.querySelector("input[name=crew_ids]");
+        if (tr.hidden && box) box.checked = false;  // never send to someone you can't see
+        tr.querySelector("[data-rate]").textContent = rates[skill] || rates[""];
+      });
+    };
+    var lastSkill = skillSelect ? skillSelect.value : "";
+    if (skillSelect) skillSelect.addEventListener("change", function () {
+      if (roleInput && (!roleInput.value.trim() || roleInput.value === lastSkill)) roleInput.value = skillSelect.value;
+      lastSkill = skillSelect.value;
+      filterCrew();
+    });
+    if (showAll) showAll.addEventListener("change", filterCrew);
+    filterCrew();
+  }
+
   // Gear from documents: show how many of the chosen item are free on the event's dates.
   var suggestForm = document.querySelector("form[data-gear-suggestions]");
   if (suggestForm) {

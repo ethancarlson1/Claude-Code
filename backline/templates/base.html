@@ -9,6 +9,7 @@
   <link rel="apple-touch-icon" href="{{ url_for('static', filename='brand/apple-touch-icon.png') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   {% if demo %}<meta name="robots" content="noindex, nofollow">{% endif %}
+  {% block head %}{% endblock %}
 </head>
 <body class="{% block body_class %}app{% endblock %}">
 {% if demo %}
@@ -27,7 +28,7 @@
     <ul class="nav">
       <li><a href="{{ url_for('dashboard.index') }}" class="{{ 'active' if ep == 'dashboard.index' }}">Dashboard</a></li>
       <li><a href="{{ url_for('events.calendar') }}" class="{{ 'active' if ep == 'events.calendar' }}">Calendar</a></li>
-      <li><a href="{{ url_for('events.index') }}" class="{{ 'active' if ep.startswith('events.') and ep != 'events.calendar' }}">Events</a></li>
+      <li><a href="{{ url_for('events.index') }}" class="{{ 'active' if (ep.startswith('events.') and ep != 'events.calendar') or ep == 'offers.new' }}">Events</a></li>
       <li><a href="{{ url_for('requests.index') }}" class="{{ 'active' if ep.startswith('requests.') or ep == 'imports.new' }}">Requests{% if new_requests %} <span class="nav-count" title="{{ new_requests }} new">{{ new_requests }}</span>{% endif %}</a></li>
       <li><a href="{{ url_for('inventory.index') }}" class="{{ 'active' if ep.startswith('inventory.') }}">Inventory</a></li>
       <li><a href="{{ url_for('people.index', kind='vehicles') }}" class="{{ 'active' if request.view_args and request.view_args.get('kind') == 'vehicles' }}">Vehicles</a></li>
@@ -40,7 +41,7 @@
       <li><a href="{{ url_for('people.index', kind='clients') }}" class="{{ 'active' if request.view_args and request.view_args.get('kind') == 'clients' }}">Clients</a></li>
       <li><a href="{{ url_for('people.index', kind='venues') }}" class="{{ 'active' if request.view_args and request.view_args.get('kind') == 'venues' }}">Venues</a></li>
       <li class="nav-label">Admin</li>
-      <li><a href="{{ url_for('settings.index') }}" class="{{ 'active' if ep.startswith('settings.') or ep.startswith('quickbooks.') or ep.startswith('backups.') or ep == 'imports.settings' }}">Settings</a></li>
+      <li><a href="{{ url_for('settings.index') }}" class="{{ 'active' if ep.startswith('settings.') or ep.startswith('quickbooks.') or ep.startswith('backups.') or ep in ('imports.settings', 'offers.settings') }}">Settings</a></li>
     </ul>
     {% if current_user %}
     <form class="sidebar-foot" method="post" action="{{ url_for('auth.logout') }}">
