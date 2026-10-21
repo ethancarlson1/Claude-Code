@@ -88,6 +88,14 @@ def gear_availability(event):
     return result
 
 
+def free_quantities(start, end, exclude_event_id=None):
+    """Units of each active inventory item not reserved by other events
+    overlapping [start, end]. Returns {item_id: free}."""
+    booked = booked_quantities(start, end, exclude_event_id)
+    return {i["id"]: max(i["quantity"] - booked.get(i["id"], 0), 0)
+            for i in db.query("SELECT id, quantity FROM inventory_items WHERE status = 'active'")}
+
+
 def shortage_count(event):
     return sum(1 for a in gear_availability(event).values() if a["short"])
 

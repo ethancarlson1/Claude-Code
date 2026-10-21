@@ -272,6 +272,22 @@
     });
   }
 
+  // Gear from documents: show how many of the chosen item are free on the event's dates.
+  var suggestForm = document.querySelector("form[data-gear-suggestions]");
+  if (suggestForm) {
+    var freeMap = JSON.parse(document.getElementById("gear-free").textContent);
+    var showFree = function (tr) {
+      var free = freeMap[tr.querySelector("select").value];
+      var qty = parseInt(tr.querySelector("input[type=number]").value, 10) || 0;
+      var cell = tr.querySelector("[data-free]");
+      cell.textContent = free === undefined ? "—" : free;
+      cell.classList.toggle("error", free !== undefined && qty > free);
+    };
+    var onEdit = function (e) { var tr = e.target.closest("tr[data-suggestion]"); if (tr) showFree(tr); };
+    suggestForm.addEventListener("change", onEdit);
+    suggestForm.addEventListener("input", onEdit);
+  }
+
   // Import with AI: check sizes before sending, then show that it's working (it can take a minute).
   var aiForm = document.querySelector("form[data-ai-import]");
   if (aiForm) {

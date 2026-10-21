@@ -393,6 +393,8 @@ def detail(event_id):
         gear_total=services.gear_total(event),
         days=util.event_days(event),
         statuses=util.EVENT_STATUSES,
+        pending_gear=db.scalar("SELECT COUNT(*) FROM gear_suggestions WHERE event_id = ? AND status = 'pending'",
+                               (event_id,)),
     )
     if tab == "crew":
         ctx["crew_fields"] = CREW_FIELDS
@@ -403,6 +405,15 @@ def detail(event_id):
         items = db.query("SELECT * FROM inventory_items WHERE status = 'active' ORDER BY category, name COLLATE NOCASE")
         ctx["item_groups"] = _group(items, lambda i: i["category"])
         ctx["booked"] = booked
+        # Gear read from documents (riders, input lists), waiting to be checked.
+        ctx["suggestions"] = db.query(
+            "SELECT * FROM gear_suggestions WHERE event_id = ? AND status = 'pending' ORDER BY id", (event_id,))
+        ctx["free"] = {i["id"]: max(i["quantity"] - booked.get(i["id"], 0), 0) for i in items}
+        on_list = {}
+        for g in gear:
+            if g["item_id"]:
+                on_list[g["item_id"]] = on_list.get(g["item_id"], 0) + g["quantity"]
+        ctx["on_list"] = on_list
         ctx["other_events"] = db.query(
             "SELECT id, reference_number, title, event_date FROM events WHERE id != ? "
             "AND EXISTS (SELECT 1 FROM event_gear WHERE event_id = events.id) ORDER BY event_date DESC LIMIT 50",
@@ -652,6 +663,57 @@ def _get_gear(event_id, gear_id):
     if row is None:
         abort(404)
     return row
+
+
+@bp.route("/events/<int:event_id>/gear/suggestions", methods=["POST"])
+def apply_gear_suggestions(event_id):
+    """Add the checked gear from documents to the gear list: an inventory item,
+    a sub-rental line, or left out."""
+    get_event(event_id)
+    pending = db.query("SELECT * FROM gear_suggestions WHERE event_id = ? AND status = 'pending' ORDER BY id",
+                       (event_id,))
+    if request.form.get("action") == "dismiss":
+        db.execute("UPDATE gear_suggestions SET status = 'dismissed' WHERE event_id = ? AND status = 'pending'",
+                   (event_id,))
+        flash("Dismissed the gear from the documents.", "ok")
+        return _back(event_id, "gear")
+    items = {i["id"]: i for i in db.query("SELECT * FROM inventory_items WHERE status = 'active'")}
+    added = raised = subs = left_out = 0
+    sort = db.scalar("SELECT COALESCE(MAX(sort), -1) + 1 FROM event_gear WHERE event_id = ?", (event_id,))
+    for s in pending:
+        choice = request.form.get(f"item_{s['id']}", "")
+        quantity = min(max(request.form.get(f"qty_{s['id']}", type=int) or s["quantity"], 1), 999)
+        asked = f"Asked for: {s['requested']}"
+        if choice == "sub":
+            db.insert("event_gear", {"event_id": event_id, "description": s["requested"], "quantity": quantity,
+                                     "notes": "From the documents", "sort": sort})
+            sort += 1
+            subs += 1
+        elif choice.isdigit() and int(choice) in items:
+            item = items[int(choice)]
+            existing = db.query("SELECT * FROM event_gear WHERE event_id = ? AND item_id = ? ORDER BY id LIMIT 1",
+                                (event_id, item["id"]), one=True)
+            if existing is None:
+                db.insert("event_gear", {
+                    "event_id": event_id, "item_id": item["id"], "quantity": quantity, "rate": item["rental_rate"],
+                    "notes": None if s["requested"].casefold() == item["name"].casefold() else asked, "sort": sort})
+                sort += 1
+                added += 1
+            elif quantity > existing["quantity"]:
+                db.update("event_gear", existing["id"], {"quantity": quantity})
+                raised += 1
+        else:
+            db.update("gear_suggestions", s["id"], {"status": "dismissed"})
+            left_out += 1
+            continue
+        db.update("gear_suggestions", s["id"], {"status": "added"})
+    parts = [f"added {added} item{'s' if added != 1 else ''}" if added else None,
+             f"raised the quantity on {raised}" if raised else None,
+             f"added {subs} sub-rental line{'s' if subs != 1 else ''}" if subs else None,
+             f"left out {left_out}" if left_out else None]
+    summary = ", ".join(p for p in parts if p) or "nothing changed"
+    flash(f"Gear list updated: {summary}. Check the availability column for anything short.", "ok")
+    return _back(event_id, "gear")
 
 
 @bp.route("/events/<int:event_id>/gear/<int:gear_id>", methods=["POST"])

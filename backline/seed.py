@@ -718,6 +718,17 @@ Events Coordinator, Lakeview Youth Arts Fund
             "quotes": quotes, "match_reason": "Same organization and date as the gala inquiry.",
             "other": ["Crew meals provided at 5 PM", "The venue needs a certificate of insurance two weeks before",
                       "Auction slideshow plays from a laptop at the podium, with sound"],
+            "gear": [
+                {"requested": "Podium (lectern) mic", "quantity": 1, "item_id": None, "match": "none",
+                 "quote": "a podium mic"},
+                {"requested": "Handheld wireless mic", "quantity": 4, "item_id": _item("Shure ULXD2 / Beta 58 handheld"),
+                 "match": "same", "quote": "4 handheld wireless for the speakers and the auctioneer"},
+                {"requested": "Stage monitors for the jazz trio", "quantity": 3, "item_id": _item("QSC K10.2 wedge"),
+                 "match": "same", "quote": "The trio ... will need monitors"},
+                {"requested": "Laptop audio feed at the podium", "quantity": 1,
+                 "item_id": _item("Radial ProDI passive DI"), "match": "substitute",
+                 "quote": "The auction slideshow runs from a laptop at the podium and has sound."},
+            ],
         }),
     })
     original, stored, size = files.store_upload("Spring Gala details.eml", msg.as_bytes())

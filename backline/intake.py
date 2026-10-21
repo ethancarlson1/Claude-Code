@@ -438,6 +438,19 @@ def move_files(req, event_id):
     db.execute("DELETE FROM client_request_files WHERE request_id = ?", (req["id"],))
 
 
+def move_gear(req, event_id):
+    """The gear list read from the documents waits on the event's Audio &
+    backline tab for someone to check. Returns how many lines."""
+    lines = ai_details(req).get("gear") or []
+    for g in lines:
+        db.insert("gear_suggestions", {
+            "event_id": event_id, "request_id": req["id"], "requested": g["requested"], "quantity": g["quantity"],
+            "item_id": g.get("item_id"), "match": g.get("match") or "none", "quote": g.get("quote"),
+            "created_at": util.now_iso(),
+        })
+    return len(lines)
+
+
 def _client_for(a, choice):
     if choice == "new":
         return db.insert("clients", client_fields(a))
@@ -472,6 +485,7 @@ def create_event(req, title, event_date, end_date, event_type, client_choice, ve
     for template_id in profile["checklists"]:
         services.apply_checklist_template(event_id, template_id)
     move_files(req, event_id)
+    move_gear(req, event_id)
     db.update("client_requests", req["id"], {"status": "converted", "event_id": event_id, "handled_at": util.now_iso()})
     return event_id
 
@@ -505,6 +519,7 @@ def add_to_event(req, event_id):
     updates["updated_at"] = util.now_iso()
     db.update("events", event_id, updates)
     move_files(req, event_id)
+    move_gear(req, event_id)
     db.update("client_requests", req["id"], {"status": "converted", "event_id": event_id, "handled_at": util.now_iso()})
     return [label for key, label in FIELD_LABELS.items() if key in updates]
 

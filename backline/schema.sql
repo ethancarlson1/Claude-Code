@@ -362,6 +362,22 @@ CREATE TABLE IF NOT EXISTS client_request_files (
     size INTEGER NOT NULL DEFAULT 0
 );
 
+-- Gear a rider or other document asked for (read by AI), waiting on the
+-- event's Audio & backline tab for someone to check and add to the gear list.
+CREATE TABLE IF NOT EXISTS gear_suggestions (
+    id INTEGER PRIMARY KEY,
+    event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    request_id INTEGER REFERENCES client_requests(id) ON DELETE SET NULL,
+    requested TEXT NOT NULL,                     -- as the document put it
+    quantity INTEGER NOT NULL DEFAULT 1,
+    item_id INTEGER REFERENCES inventory_items(id) ON DELETE SET NULL,  -- the AI's match
+    match TEXT NOT NULL DEFAULT 'none',          -- same | substitute | none
+    quote TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',      -- pending | added | dismissed
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_gear_suggestions_event ON gear_suggestions(event_id, status);
+
 -- Each AI import, for the spending summary in Settings → AI import.
 CREATE TABLE IF NOT EXISTS ai_usage (
     id INTEGER PRIMARY KEY,

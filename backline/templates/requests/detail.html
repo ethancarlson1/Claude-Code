@@ -37,6 +37,24 @@
       <p class="help">These go into the event's office notes.</p>
     </section>
     {% endif %}
+    {% if gear %}
+    <section class="card">
+      <h2>Gear from the documents</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Asked for</th><th class="num">Qty</th><th>Our item</th>{% if gear_dates %}<th class="num">Free</th>{% endif %}</tr></thead>
+        <tbody>
+        {% for g in gear %}
+          <tr>
+            <td>{{ g.requested }}{% if g.quote %}<span class="ai-quote">“{{ g.quote }}”</span>{% endif %}</td>
+            <td class="num">{{ g.quantity }}</td>
+            <td>{% if g.item_name %}{{ g.item_name }}{% if g.match == 'substitute' %} <span class="badge badge-warn">substitute</span>{% endif %}{% else %}<span class="badge badge-muted">not in inventory</span>{% endif %}</td>
+            {% if gear_dates %}<td class="num">{% if g.item_name %}<span class="{{ 'error' if g.free < g.quantity }}">{{ g.free }}</span>{% else %}—{% endif %}</td>{% endif %}
+          </tr>
+        {% endfor %}
+        </tbody></table></div>
+      <p class="help">{% if gear_dates %}Free: units not booked on other events {% if gear_dates[0] == gear_dates[1] %}on {{ gear_dates[0]|fdate }}{% else %}from {{ gear_dates[0]|fdate('short') }} to {{ gear_dates[1]|fdate('short') }}{% endif %}. {% endif %}Once this is part of an event, you pick what goes on its gear list on the Audio &amp; backline tab.</p>
+    </section>
+    {% endif %}
     {% if files %}
     <section class="card">
       <h2>{{ 'Documents' if ai else 'Attached files' }}</h2>

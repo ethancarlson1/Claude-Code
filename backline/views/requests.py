@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 
 from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
 
-from .. import ai_import, db, files, intake, util
+from .. import ai_import, db, files, intake, services, util
 from .events import client_choices, event_type_choices, venue_choices
 
 bp = Blueprint("requests", __name__)
@@ -75,11 +75,30 @@ def detail(request_id):
     ai = ai_import.details(req)
     return render_template(
         "requests/detail.html", req=req, answers=answers, summary=intake.summary(answers, skip=("about",)), event=event,
+        **_gear_preview(ai.get("gear") or [], answers, suggested),
         files=db.query("SELECT * FROM client_request_files WHERE request_id = ? ORDER BY id", (request_id,)),
         events=_event_options(answers.get("event_date"), suggested["id"] if suggested else None),
         settings=db.get_settings(), ai=ai, quotes=_quotes_by_label(ai.get("quotes") or {}), suggested=suggested,
         model_name=ai_import.model_name(ai.get("model", "")), cost=ai_import.cost_text(ai.get("cost")),
     )
+
+
+def _gear_preview(gear, answers, suggested):
+    """The documents' gear list with our matching items and how many are free
+    on the event's dates (the matched event's, or the dates they gave)."""
+    if not gear:
+        return {"gear": [], "gear_dates": None}
+    items = {i["id"]: i for i in db.query("SELECT id, name FROM inventory_items")}
+    window = None
+    if suggested:
+        event = db.query("SELECT * FROM events WHERE id = ?", (suggested["id"],), one=True)
+        window = (event["event_date"], util.event_end(event))
+    elif answers.get("event_date"):
+        window = (answers["event_date"], answers.get("end_date") or answers["event_date"])
+    free = services.free_quantities(*window, exclude_event_id=suggested["id"] if suggested else None) if window else {}
+    rows = [dict(g, item_name=items[g["item_id"]]["name"] if g.get("item_id") in items else None,
+                 free=free.get(g.get("item_id")) if window else None) for g in gear]
+    return {"gear": rows, "gear_dates": window}
 
 
 def _quotes_by_label(quotes):
@@ -133,6 +152,11 @@ def convert(request_id):
         if not errors:
             event_id = intake.create_event(req, values["title"], values["event_date"], values["end_date"] or None,
                                            values["event_type"], values["client"], values["venue"])
+            gear = len(intake.ai_details(req).get("gear") or [])
+            if gear:
+                flash(f"Inquiry created from request #{request_id}. Check the {gear} gear item"
+                      f"{'s' if gear != 1 else ''} from the documents below, then add them to the gear list.", "ok")
+                return redirect(url_for("events.detail", event_id=event_id, tab="gear"))
             flash(f"Inquiry created from request #{request_id}. Review the details, then build the gear list and quote.",
                   "ok")
             return redirect(url_for("events.detail", event_id=event_id))
@@ -157,7 +181,13 @@ def add_to_event(request_id):
     filled = intake.add_to_event(req, event_id)
     message = f"Added request #{request_id} to this event"
     message += f", filling in {', '.join(filled).lower()}." if filled else "."
-    flash(message + " Anything that differed from what was already here is in the office notes.", "ok")
+    message += " Anything that differed from what was already here is in the office notes."
+    gear = len(intake.ai_details(req).get("gear") or [])
+    if gear:
+        flash(message + f" Check the {gear} gear item{'s' if gear != 1 else ''} from the documents below, then add "
+                        "them to the gear list.", "ok")
+        return redirect(url_for("events.detail", event_id=event_id, tab="gear"))
+    flash(message, "ok")
     return redirect(url_for("events.detail", event_id=event_id))
 
 

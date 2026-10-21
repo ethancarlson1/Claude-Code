@@ -579,3 +579,78 @@ def test_the_real_sdk_sends_what_we_expect(client, app, monkeypatch):
     assert [b["type"] for b in body["messages"][0]["content"]] == ["text", "document", "text"]
     usage = query(app, "SELECT * FROM ai_usage", one=True)
     assert (usage["input_tokens"], usage["output_tokens"]) == (2400, 800)
+
+
+# --- Gear from riders --------------------------------------------------------------------------------
+
+def test_rider_gear_is_matched_to_inventory_and_checked_on_the_event(client, claude, app, make):
+    sm58 = make("inventory_items", name="Shure SM58", category="Microphones", quantity=10, rental_rate=8)
+    svt = make("inventory_items", name="Ampeg SVT-CL + SVT-810E", category="Bass Amps", make="Ampeg", quantity=1,
+               rental_rate=125)
+    make("inventory_items", name="Old snake", category="Cables & Snakes", status="retired")
+    other = make("events", title="Other show", event_date="2030-06-01", status="confirmed")
+    make("event_gear", event_id=other, item_id=svt, quantity=1)
+    show = make("events", title="Velvet Owls", event_date="2030-06-01", status="confirmed")
+    make("event_gear", event_id=show, item_id=sm58, quantity=4)
+    claude.replies.append(reply(ai_result({"event_date": "2030-06-01"}, match=show, reason="Same band and date") | {
+        "gear": [
+            {"requested": "Shure SM58", "quantity": 6, "inventory_id": sm58, "match": "same", "quote": "6x SM58"},
+            {"requested": "Ampeg SVT-VR + 8x10", "quantity": 1, "inventory_id": svt, "match": "substitute",
+             "quote": "Bass: Ampeg SVT-VR or similar"},
+            {"requested": "Leslie 122", "quantity": 1, "inventory_id": 0, "match": "none", "quote": "Leslie 122"},
+            {"requested": "Mystery box", "quantity": 0, "inventory_id": 99999, "match": "same", "quote": ""},
+        ]}))
+    page = _import(client, files=[("Velvet Owls rider.pdf", PDF)]).data.decode()
+    sent = claude.text_sent()
+    assert f"{sm58} | Shure SM58 | Microphones | - | 10" in sent and "Old snake" not in sent
+    assert "Gear from the documents" in page and "substitute" in page and "not in inventory" in page
+    assert '<span class="error">0</span>' in page  # the only SVT is out on the other show
+    gear = json.loads(query(app, "SELECT ai_details FROM client_requests", one=True)["ai_details"])["gear"]
+    assert gear[3] == {"requested": "Mystery box", "quantity": 1, "item_id": None, "match": "none", "quote": ""}
+
+    resp = client.post("/requests/1/add-to-event", data={"event_id": show})
+    assert resp.headers["Location"].endswith(f"/events/{show}?tab=gear")
+    page = client.get(f"/events/{show}").data.decode()
+    assert "4 gear items read from documents are waiting to be checked." in page
+    page = client.get(f"/events/{show}?tab=gear").data.decode()
+    assert "Gear from the documents" in page and "Already on the gear list: 4" in page
+    rows = query(app, "SELECT * FROM gear_suggestions ORDER BY id")
+    assert [(r["item_id"], r["match"], r["status"]) for r in rows] == [
+        (sm58, "same", "pending"), (svt, "substitute", "pending"), (None, "none", "pending"),
+        (None, "none", "pending")]
+    assert f'<option value="{svt}" selected>' in page and '<option value="sub" selected>' in page
+
+    ids = [r["id"] for r in rows]
+    resp = client.post(f"/events/{show}/gear/suggestions", data={
+        "action": "add", f"item_{ids[0]}": str(sm58), f"qty_{ids[0]}": "6", f"item_{ids[1]}": str(svt),
+        f"qty_{ids[1]}": "1", f"item_{ids[2]}": "sub", f"qty_{ids[2]}": "1", f"item_{ids[3]}": ""},
+        follow_redirects=True)
+    assert ("Gear list updated: added 1 item, raised the quantity on 1, added 1 sub-rental line, left out 1."
+            in resp.data.decode())
+    lines = query(app, "SELECT item_id, description, quantity, rate, notes FROM event_gear WHERE event_id = ? "
+                       "ORDER BY id", (show,))
+    assert lines == [
+        {"item_id": sm58, "description": None, "quantity": 6, "rate": None, "notes": None},
+        {"item_id": svt, "description": None, "quantity": 1, "rate": 125, "notes": "Asked for: Ampeg SVT-VR + 8x10"},
+        {"item_id": None, "description": "Leslie 122", "quantity": 1, "rate": None, "notes": "From the documents"},
+    ]
+    assert [r["status"] for r in query(app, "SELECT status FROM gear_suggestions ORDER BY id")] == [
+        "added", "added", "added", "dismissed"]
+    page = client.get(f"/events/{show}?tab=gear").data.decode()
+    assert "Gear from the documents" not in page and "waiting to be checked" not in page
+
+
+def test_gear_suggestions_can_be_dismissed_and_follow_a_new_inquiry(client, claude, app, make):
+    mic = make("inventory_items", name="Shure SM57", category="Microphones", quantity=16)
+    claude.replies.append(reply(ai_result({"name": "Jess", "event_date": "2030-07-01"}) | {"gear": [
+        {"requested": "SM57", "quantity": 8, "inventory_id": mic, "match": "same", "quote": "8 x SM57"}]}))
+    _import(client, pasted="Rider: 8 x SM57")
+    page = client.get("/requests/1").data.decode()
+    assert "on Mon, Jul 1, 2030" in page and ">16<" in page  # free on the date they gave
+    resp = client.post("/requests/1/convert", data={"title": "Jess show", "event_date": "2030-07-01", "client": "new",
+                                                    "venue": ""})
+    event_id = query(app, "SELECT id FROM events", one=True)["id"]
+    assert resp.headers["Location"].endswith(f"/events/{event_id}?tab=gear")
+    client.post(f"/events/{event_id}/gear/suggestions", data={"action": "dismiss"})
+    assert query(app, "SELECT status FROM gear_suggestions", one=True)["status"] == "dismissed"
+    assert not query(app, "SELECT * FROM event_gear")
